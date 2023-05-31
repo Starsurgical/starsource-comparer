@@ -10,9 +10,7 @@ Set-Location $STAGE
 
 $ZIP = "$SRC_DIR\$($Env:CRATE_NAME)-$($Env:APPVEYOR_REPO_TAG_NAME)-$($Env:TARGET).zip"
 
-Copy-Item "$SRC_DIR\target\$($Env:TARGET)\release\devilution-comparer.exe" '.\'
-Copy-Item "$SRC_DIR\cvdump.exe" '.\'
-Copy-Item "$SRC_DIR\cvdump-LICENSE" '.\'
+Copy-Item "$SRC_DIR\target\$($Env:TARGET)\release\starsource-comparer.exe" '.\'
 
 7z a "$ZIP" *
 

@@ -7,11 +7,11 @@ use super::{Command, CompareCommandInfo, CompareOpts, DisasmOpts, GenerateFullCo
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 pub fn parse_cmdline() -> Command {
-    let diablo_file = Arg::with_name("DIABLO_FILE")
-        .help("Path to the original Diablo.exe to use")
+    let starcraft_file = Arg::with_name("STARCRAFT_FILE")
+        .help("Path to the original Starcraft.exe to use")
         .required(true);
 
-    let devilution_file = Arg::with_name("DEVILUTION_FILE")
+    let starsource_file = Arg::with_name("STARSOURCE_FILE")
         .help(
             "Sets the debug binary file to use. \
              The respective .pdb file needs to exist in the same folder as well. \
@@ -22,8 +22,8 @@ pub fn parse_cmdline() -> Command {
     let debug_symbol = Arg::with_name("DEBUG_SYMBOL")
         .help(
             "Function name/debug symbol to compare. This has to be defined for the original \
-             binary in the comparer-config.toml. Is the size attribute missing, devilution-comparer \
-             will use the size of the devilution function for the original binary as well.",
+             binary in the comparer-config.toml. Is the size attribute missing, starsource-comparer \
+             will use the size of the starsource function for the original binary as well.",
         ).required(true);
 
     let watch = Arg::with_name("watch").short("w").long("watch").help(
@@ -57,20 +57,20 @@ pub fn parse_cmdline() -> Command {
         )
         .global(true);
 
-    let app = App::new("devilution-comparer")
+    let app = App::new("starsource-comparer")
         .setting(AppSettings::SubcommandsNegateReqs)
         .version(VERSION)
         .about(
             "Generates orig.asm and compare.asm in the current working directory. \
-             Finds the function specified in the devilution binary, disassembles it, \
+             Finds the function specified in the starsource binary, disassembles it, \
              then disassembles the original binary with the same length at the specified offset. \
-             The disassembled original code will be written into orig.asm, the devilution code \
+             The disassembled original code will be written into orig.asm, the starsource code \
              into compare.asm.\n\nNote that the disassembler will use the function offset read \
              from the PDB for both decompilations in order to align the addresses in the output files \
              (including relative jumps).",
         )
-        .arg(diablo_file)
-        .arg(devilution_file)
+        .arg(starcraft_file)
+        .arg(starsource_file)
         .arg(debug_symbol)
         .arg(watch)
         .arg(show_ip)
@@ -103,12 +103,12 @@ pub fn parse_cmdline() -> Command {
 }
 
 fn parse_compare_args(matches: &ArgMatches) -> CompareCommandInfo {
-    let compare_file_path: PathBuf = matches.value_of_os("DEVILUTION_FILE").unwrap().into();
+    let compare_file_path: PathBuf = matches.value_of_os("STARSOURCE_FILE").unwrap().into();
     let compare_pdb_file = compare_file_path.with_extension("pdb");
 
     CompareCommandInfo {
         compare_opts: CompareOpts {
-            orig: matches.value_of_os("DIABLO_FILE").unwrap().into(),
+            orig: matches.value_of_os("STARCRAFT_FILE").unwrap().into(),
             compare_file_path,
             compare_pdb_file,
             debug_symbol: matches.value_of("DEBUG_SYMBOL").unwrap().into(),

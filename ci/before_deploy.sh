@@ -17,11 +17,9 @@ main() {
 
     test -f Cargo.lock || cargo generate-lockfile
 
-    cargo rustc --bin devilution-comparer --target $TARGET --release
+    cargo rustc --bin starsource-comparer --target $TARGET --release
 
-    cp target/$TARGET/release/devilution-comparer $stage/
-    cp cvdump.exe $stage/
-    cp cvdump-LICENSE $stage/
+    cp target/$TARGET/release/starsource-comparer $stage/
 
     cd $stage
     tar cJf $src/$CRATE_NAME-$TRAVIS_TAG-$TARGET.tar.xz *

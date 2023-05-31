@@ -7,7 +7,7 @@ shallow_clone: true
 environment:
   global:
     RUST_VERSION: stable
-    CRATE_NAME: devilution-comparer
+    CRATE_NAME: starsource-comparer
 
   # These are all the build jobs. Adjust as necessary. Comment out what you
   # don't need
@@ -49,7 +49,7 @@ test_script:
     )
 
 before_deploy:
-  - cargo rustc --target %TARGET% --release --bin devilution-comparer
+  - cargo rustc --target %TARGET% --release --bin starsource-comparer
   - ps: ci\before_deploy.ps1
 
 deploy:
