@@ -153,22 +153,21 @@ fn write_compare(
     orig_addr_offset: u64,
     orig_fn: &FunctionDefinition,
 ) -> Result<(u64, usize), CompareError> {
-    let pdb = Pdb::new(&info.compare_opts.compare_pdb_file).map_err(PdbError)?;
-    let FunctionSymbol { offset, size, .. } = pdb
-        .parse_pdb()
-        .find(|symbol| symbol.name == info.compare_opts.debug_symbol)
+    let pdb_funcs = get_pdb_funcs(&info.compare_opts.compare_pdb_file).map_err(PdbError)?;
+    let FunctionSymbol { offset, size, .. } = pdb_funcs
+        .get(&info.compare_opts.debug_symbol)
         .ok_or(SymbolNotFound)?;
 
     let mut orig_function_bytes = if let Some(orig_size) = orig_fn.size {
         vec![0; orig_size]
     } else {
-        vec![0; size]
+        vec![0; *size]
     };
 
     let mut compare_function_bytes = if info.truncate_to_original {
         vec![0; orig_fn.size.expect("orig size is None even though truncate_to_original is set. Initial check was wrong!")]
     } else {
-        vec![0; size]
+        vec![0; *size]
     };
 
     let orig_offset = orig_fn.addr - orig_addr_offset;
@@ -181,7 +180,7 @@ fn write_compare(
     read_file_into(
         &mut compare_function_bytes,
         &info.compare_opts.compare_file_path,
-        offset + PDB_OFFSET_COMPARE_FILE,
+        *offset,
     )?;
 
     let curdir = std::env::current_dir().map_err(IoError)?;
@@ -222,7 +221,7 @@ fn write_compare(
             Ok(())
         })?;
 
-    Ok((addr, size))
+    Ok((addr, *size))
 }
 
 fn read_file_into(

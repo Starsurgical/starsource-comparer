@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::{BufWriter, Write};
-use std::iter::FromIterator;
 use std::path::PathBuf;
 
 use self::GenerateFullCommandError::*;
@@ -91,9 +90,7 @@ fn generate_full_pdb(
     let mut pdb_path = info.file_path.clone();
     pdb_path.set_extension("pdb");
 
-    let pdb = Pdb::new(pdb_path).map_err(PdbError)?;
-    let mut pdb_funcs: HashMap<&str, FunctionSymbol> =
-        HashMap::from_iter(pdb.parse_pdb().map(|func| (func.name, func)));
+    let mut pdb_funcs: HashMap<String, FunctionSymbol> = get_pdb_funcs(pdb_path).map_err(PdbError)?;
 
     let mut path = std::env::current_dir().map_err(IoError)?;
     path.push("compare_full.asm");
@@ -110,10 +107,10 @@ fn generate_full_pdb(
         .map(BufWriter::new)
         .and_then(|mut writer| {
             for func in &cfg.func {
-                if let Some(pdb_func) = pdb_funcs.remove::<str>(func.name.as_ref()) {
-                    write_function_head(&mut writer, pdb_func.size, func.name.as_ref())?;
+                if let Some(pdb_func) = pdb_funcs.remove::<str>(&func.name) {
+                    write_function_head(&mut writer, pdb_func.size, &func.name)?;
 
-                    let offset = (pdb_func.offset + PDB_OFFSET_COMPARE_FILE) as usize;
+                    let offset = pdb_func.offset as usize;
                     let size = if info.truncate_to_original {
                         if let Some(size) = func.size {
                             size
