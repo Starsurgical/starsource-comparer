@@ -10636,17 +10636,17 @@ addr = 0x45A620
 size = 0x6E
 
 [[func]]
-name = "sub_45A690"
+name = "HasCampaign"
 addr = 0x45A690
 size = 0x1E
 
 [[func]]
-name = "sub_45A6B0"
+name = "HasEitherCampaign"
 addr = 0x45A6B0
 size = 0x45
 
 [[func]]
-name = "HasBroodwarCampaign"
+name = "HasExpansionCampaign"
 addr = 0x45A700
 size = 0x27
 
@@ -10656,12 +10656,12 @@ addr = 0x45A730
 size = 0x1D
 
 [[func]]
-name = "sub_45A750"
+name = "do_gamemode_select_dlg"
 addr = 0x45A750
 size = 0x8B
 
 [[func]]
-name = "sub_45A7E0"
+name = "glumain_file_exists"
 addr = 0x45A7E0
 size = 0xC5
 
@@ -10671,7 +10671,7 @@ addr = 0x45A8B0
 size = 0x128
 
 [[func]]
-name = "glumain_launch_staredit"
+name = "launch_staredit"
 addr = 0x45AA00
 size = 0xF6
 
