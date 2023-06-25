@@ -10421,12 +10421,12 @@ addr = 0x458790
 size = 0xA
 
 [[func]]
-name = "glues_transition_cb"
+name = "glues_transition_in_cb"
 addr = 0x4587A0
 size = 0x1C2
 
 [[func]]
-name = "glues_SwooshOutCallback"
+name = "glues_transition_out_cb"
 addr = 0x458980
 size = 0x163
 
@@ -10596,12 +10596,12 @@ addr = 0x45A040
 size = 0x11A
 
 [[func]]
-name = "sub_45A180"
+name = "gluLogin_insert_chara"
 addr = 0x45A180
 size = 0x47
 
 [[func]]
-name = "sub_45A1D0"
+name = "gluLogin_retrieve_character"
 addr = 0x45A1D0
 size = 0x6B
 
@@ -11176,7 +11176,7 @@ addr = 0x4605C0
 size = 0x1B
 
 [[func]]
-name = "sub_4605E0"
+name = "gluPopup_scale_message_size"
 addr = 0x4605E0
 size = 0xEA
 
@@ -18591,7 +18591,7 @@ addr = 0x49D0B0
 size = 0x39
 
 [[func]]
-name = "UpdateHash"
+name = "ShaUpdateHash"
 addr = 0x49D0F0
 size = 0x271
 
@@ -23936,7 +23936,7 @@ addr = 0x4C6890
 size = 0xD
 
 [[func]]
-name = "sub_4C68A0"
+name = "lbox_hide"
 addr = 0x4C68A0
 size = 0x13
 
@@ -24336,7 +24336,7 @@ addr = 0x4CA110
 size = 0x15C
 
 [[func]]
-name = "sub_4CA290"
+name = "effects_render_text"
 addr = 0x4CA290
 size = 0xEA
 
