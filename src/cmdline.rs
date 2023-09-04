@@ -59,6 +59,7 @@ pub fn parse_cmdline() -> Command {
 
     let app = App::new("starsource-comparer")
         .setting(AppSettings::SubcommandsNegateReqs)
+        .setting(AppSettings::ArgsNegateSubcommands)
         .version(VERSION)
         .about(
             "Generates orig.asm and compare.asm in the current working directory. \
