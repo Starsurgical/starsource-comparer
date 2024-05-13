@@ -63,3 +63,9 @@ SUBCOMMANDS:
     generate-full    Generates a 'full.asm' file with all functions defined in comparer-config.toml.
     help             Prints this message or the help of the given subcommand(s)
 ```
+
+## Compiling
+```
+cargo build
+```
+
