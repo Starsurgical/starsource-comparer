@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::fs::File;
 use std::io::{BufWriter, Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
@@ -56,6 +57,11 @@ pub fn print_error(e: &CompareError) {
 }
 
 pub fn run(mut info: CompareCommandInfo, cfg: &ComparerConfig) -> Result<(), CompareError> {
+  let orig_fn_map = cfg
+    .func
+    .iter()
+    .map(|func| (func.addr, func.clone()))
+    .collect::<HashMap<_, _>>();
   let orig_fn = cfg
     .func
     .iter()
@@ -71,7 +77,7 @@ pub fn run(mut info: CompareCommandInfo, cfg: &ComparerConfig) -> Result<(), Com
   }
 
   // initial run
-  run_disassemble(&mut info, cfg.address_offset, orig_fn)?;
+  run_disassemble(&mut info, cfg.address_offset, orig_fn, &orig_fn_map)?;
 
   if !info.enable_watcher {
     return Ok(());
@@ -93,7 +99,7 @@ pub fn run(mut info: CompareCommandInfo, cfg: &ComparerConfig) -> Result<(), Com
   loop {
     match rx.recv() {
       Ok(DebouncedEvent::Create(_)) | Ok(DebouncedEvent::Write(_)) => {
-        if let Err(e) = run_disassemble(&mut info, cfg.address_offset, orig_fn) {
+        if let Err(e) = run_disassemble(&mut info, cfg.address_offset, orig_fn, &orig_fn_map) {
           print_error(&e);
         }
       }
@@ -110,8 +116,9 @@ fn run_disassemble(
   info: &mut CompareCommandInfo,
   orig_addr_offset: u64,
   orig_fn: &FunctionDefinition,
+  orig_fn_map: &HashMap<u64, FunctionDefinition>,
 ) -> Result<(), CompareError> {
-  match write_compare(info, orig_addr_offset, orig_fn) {
+  match write_compare(info, orig_addr_offset, orig_fn, orig_fn_map) {
     Ok((addr, size)) => {
       if let Some((old_addr, old_size)) = info.last_offset_size {
         print!(
@@ -146,9 +153,13 @@ fn write_compare(
   info: &mut CompareCommandInfo,
   orig_addr_offset: u64,
   orig_fn: &FunctionDefinition,
+  orig_fn_map: &HashMap<u64, FunctionDefinition>,
 ) -> Result<(u64, usize), CompareError> {
   let pdb_funcs = get_pdb_funcs(&info.compare_opts.compare_pdb_file).map_err(PdbError)?;
   let FunctionSymbol { offset, size, .. } = pdb_funcs.get(&info.compare_opts.debug_symbol).ok_or(SymbolNotFound)?;
+  let pdb_fn_map = pdb_funcs.values()
+    .map(|func| func.as_function_definition_pair())
+    .collect::<HashMap<_, _>>();
 
   let mut orig_function_bytes = if let Some(orig_size) = orig_fn.size {
     vec![0; orig_size]
@@ -187,8 +198,9 @@ fn write_compare(
       write_disasm(
         &mut buf_writer,
         &orig_function_bytes,
-        &mut info.disasm_opts,
+        &info.disasm_opts,
         orig_fn.addr,
+        orig_fn_map,
       )
       .map_err(DisasmError)?;
 
@@ -203,7 +215,14 @@ fn write_compare(
     .map(BufWriter::new)
     .map_err(IoError)
     .and_then(|mut buf_writer| {
-      write_disasm(&mut buf_writer, &compare_function_bytes, &mut info.disasm_opts, addr).map_err(DisasmError)?;
+      write_disasm(
+        &mut buf_writer,
+        &compare_function_bytes,
+        &info.disasm_opts,
+        addr,
+        &pdb_fn_map,
+      )
+      .map_err(DisasmError)?;
 
       Ok(())
     })?;

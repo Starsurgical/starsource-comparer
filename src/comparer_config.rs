@@ -10,7 +10,7 @@ pub struct ComparerConfig {
   pub func: Vec<FunctionDefinition>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct FunctionDefinition {
   pub name: String,
   pub addr: u64,

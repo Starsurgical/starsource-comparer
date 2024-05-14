@@ -5,6 +5,8 @@ use std::fs::File;
 use std::path::Path;
 use thiserror::Error;
 
+use crate::comparer_config::FunctionDefinition;
+
 pub const PDB_SEGMENT_OFFSET: u64 = 0x0040_0C00;
 
 #[derive(Error, Debug)]
@@ -24,6 +26,21 @@ pub struct FunctionSymbol {
   pub name: String,
   pub offset: u64,
   pub size: usize,
+}
+
+impl FunctionSymbol {
+  pub fn as_function_definition(&self) -> FunctionDefinition {
+    FunctionDefinition {
+      addr: self.offset + PDB_SEGMENT_OFFSET,
+      name: self.name.clone(),
+      size: Some(self.size),
+    }
+  }
+
+  pub fn as_function_definition_pair(&self) -> (u64, FunctionDefinition) {
+    let func = self.as_function_definition();
+    (func.addr, func)
+  }
 }
 
 fn to_function_symbol(data: pdb_addr2line::Function) -> FunctionSymbol {

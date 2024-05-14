@@ -32,7 +32,7 @@ pub fn run(info: GenerateFullCommandInfo, cfg: &ComparerConfig) -> Result<(), Ge
   }
 }
 
-fn generate_full_orig(mut info: GenerateFullCommandInfo, cfg: &ComparerConfig) -> Result<(), GenerateFullCommandError> {
+fn generate_full_orig(info: GenerateFullCommandInfo, cfg: &ComparerConfig) -> Result<(), GenerateFullCommandError> {
   let mut path = std::env::current_dir().map_err(IoError)?;
   path.push("orig_full.asm");
 
@@ -40,6 +40,12 @@ fn generate_full_orig(mut info: GenerateFullCommandInfo, cfg: &ComparerConfig) -
 
   let stdout = std::io::stdout();
   let mut stdout_lock = stdout.lock();
+
+  let orig_fn_map = cfg
+    .func
+    .iter()
+    .map(|func| (func.addr, func.clone()))
+    .collect::<HashMap<_, _>>();
 
   File::create(path)
     .map_err(IoError)
@@ -68,7 +74,7 @@ fn generate_full_orig(mut info: GenerateFullCommandInfo, cfg: &ComparerConfig) -
           .get(offset..offset_end)
           .ok_or_else(|| FunctionDefSizeWrong(func.name.clone()))?;
 
-        write_disasm(&mut writer, func_bytes, &mut info.disasm_opts, func.addr).map_err(DisasmError)?;
+        write_disasm(&mut writer, func_bytes, &info.disasm_opts, func.addr, &orig_fn_map).map_err(DisasmError)?;
       }
       Ok(())
     })?;
@@ -76,11 +82,15 @@ fn generate_full_orig(mut info: GenerateFullCommandInfo, cfg: &ComparerConfig) -
   Ok(())
 }
 
-fn generate_full_pdb(mut info: GenerateFullCommandInfo, cfg: &ComparerConfig) -> Result<(), GenerateFullCommandError> {
+fn generate_full_pdb(info: GenerateFullCommandInfo, cfg: &ComparerConfig) -> Result<(), GenerateFullCommandError> {
   let mut pdb_path = info.file_path.clone();
   pdb_path.set_extension("pdb");
 
   let mut pdb_funcs: HashMap<String, FunctionSymbol> = get_pdb_funcs(pdb_path).map_err(PdbError)?;
+  let pdb_fn_map = pdb_funcs
+    .iter()
+    .map(|(_, func)| func.as_function_definition_pair())
+    .collect::<HashMap<_, _>>();
 
   let mut path = std::env::current_dir().map_err(IoError)?;
   path.push("compare_full.asm");
@@ -123,8 +133,9 @@ fn generate_full_pdb(mut info: GenerateFullCommandInfo, cfg: &ComparerConfig) ->
           write_disasm(
             &mut writer,
             func_bytes,
-            &mut info.disasm_opts,
+            &info.disasm_opts,
             pdb_func.offset + PDB_SEGMENT_OFFSET,
+            &pdb_fn_map,
           )
           .map_err(DisasmError)?;
         } else {
