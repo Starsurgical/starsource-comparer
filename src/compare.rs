@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use std::sync::mpsc::channel;
 use std::time::Duration;
 
-use notify::{DebouncedEvent, RecommendedWatcher, RecursiveMode, Watcher};
+use notify::{Config, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 
 use self::CompareError::*;
 use super::comparer_config::*;
@@ -85,7 +85,8 @@ pub fn run(mut info: CompareCommandInfo, cfg: &ComparerConfig) -> Result<(), Com
 
   let (tx, rx) = channel();
 
-  let mut watcher: RecommendedWatcher = Watcher::new(tx, Duration::from_secs(2)).map_err(NotifyError)?;
+  let mut watcher: RecommendedWatcher =
+    Watcher::new(tx, Config::default().with_poll_interval(Duration::from_secs(2))).map_err(NotifyError)?;
 
   watcher
     .watch(&info.compare_opts.compare_pdb_file, RecursiveMode::NonRecursive)
@@ -98,16 +99,22 @@ pub fn run(mut info: CompareCommandInfo, cfg: &ComparerConfig) -> Result<(), Com
 
   loop {
     match rx.recv() {
-      Ok(DebouncedEvent::Create(_)) | Ok(DebouncedEvent::Write(_)) => {
-        if let Err(e) = run_disassemble(&mut info, cfg.address_offset, orig_fn, &orig_fn_map) {
-          print_error(&e);
+      Ok(Ok(evt)) => match evt.kind {
+        EventKind::Create(_) | EventKind::Modify(_) => {
+          if let Err(e) = run_disassemble(&mut info, cfg.address_offset, orig_fn, &orig_fn_map) {
+            print_error(&e);
+          }
         }
-      }
+        _ => {}
+      },
       Err(e) => {
         println!("Watcher error: {:#?}", e);
         std::process::exit(1);
       }
-      _ => {}
+      Ok(Err(e)) => {
+        println!("Watcher error: {:#?}", e);
+        std::process::exit(1);
+      }
     }
   }
 }
@@ -157,7 +164,8 @@ fn write_compare(
 ) -> Result<(u64, usize), CompareError> {
   let pdb_funcs = get_pdb_funcs(&info.compare_opts.compare_pdb_file).map_err(PdbError)?;
   let FunctionSymbol { offset, size, .. } = pdb_funcs.get(&info.compare_opts.debug_symbol).ok_or(SymbolNotFound)?;
-  let pdb_fn_map = pdb_funcs.values()
+  let pdb_fn_map = pdb_funcs
+    .values()
     .map(|func| func.as_function_definition_pair())
     .collect::<HashMap<_, _>>();
 

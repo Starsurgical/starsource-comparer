@@ -1,9 +1,10 @@
-use std::any::Any;
 use std::collections::HashMap;
+use std::fmt::Debug;
 use std::io::{Error as IoError, Write};
 
+use zydis::ffi::{DecodedOperandKind, FormatterBuffer, FormatterContext};
 use zydis::{
-  AddressWidth, DecodedInstruction, Decoder, Formatter, FormatterBuffer, FormatterContext, FormatterStyle, MachineMode, Mnemonic, OperandType, OutputBuffer, Result as ZydisResult, Status
+  Decoder, Formatter, FormatterStyle, Instruction, Mnemonic, OutputBuffer, Result as ZydisResult, Status, VisibleOperands
 };
 
 use super::comparer_config::FunctionDefinition;
@@ -20,6 +21,7 @@ pub struct DisasmOpts {
 struct DisasmExtra {
   pub opts: DisasmOpts,
   pub fn_map: HashMap<u64, FunctionDefinition>,
+  pub offset: u64,
 }
 
 #[derive(Debug)]
@@ -28,20 +30,34 @@ pub enum DisasmError {
   ZydisError(Status),
 }
 
-fn is_imm_jmpcall(insn: &DecodedInstruction) -> bool {
+fn is_imm_jmpcall(insn: &Instruction<VisibleOperands>) -> bool {
   match insn.mnemonic {
-    Mnemonic::JMP | Mnemonic::CALL if insn.operand_count > 0 && insn.operands[0].ty == OperandType::IMMEDIATE => true,
+    Mnemonic::JMP | Mnemonic::CALL if insn.raw.imm.len() > 0 => true,
     _ => false
   }
+  /*
+  match insn.mnemonic {
+    Mnemonic::JMP | Mnemonic::CALL if insn.operand_count > 0 => {
+      match &insn.operands()[0].kind {
+        DecodedOperandKind::Imm(imm) => {
+          true
+        }
+        _ => false
+      }
+    }
+    _ => false
+  } */
 }
 
 // If the decoded instruction is an immediate call or jmp instruction,
 // then return the target address.
-fn get_jmpcall_address(insn: &DecodedInstruction, ip: &u64) -> Option<u64> {
+fn get_jmpcall_address(insn: &Instruction<VisibleOperands>, ip: &u64) -> Option<u64> {
   if is_imm_jmpcall(insn) {
-    Some(ip.wrapping_add(insn.operands[0].imm.value) + u64::from(insn.length));
+    insn.calc_absolute_address(*ip, &insn.operands()[0]).ok()
   }
-  None
+  else {
+    None
+  }
 }
 
 pub fn write_disasm(
@@ -54,8 +70,7 @@ pub fn write_disasm(
   let mut buf = [0u8; 255];
   let mut buf = OutputBuffer::new(&mut buf);
 
-  // FIXME: Formatter:intel()
-  let mut formatter = Formatter::new(FormatterStyle::INTEL).map_err(DisasmError::ZydisError)?;
+  let mut formatter = Formatter::<DisasmExtra>::new_custom_userdata(FormatterStyle::INTEL_MASM);
   formatter
     .set_print_address_abs(Box::new(format_addrs))
     .map_err(DisasmError::ZydisError)?;
@@ -73,16 +88,16 @@ pub fn write_disasm(
   }
 
   // FIXME: Decoder::new32()
-  let decoder = Decoder::new(MachineMode::LEGACY_32, AddressWidth::_32).map_err(DisasmError::ZydisError)?;
+  let decoder = Decoder::new32();
 
   /*
   // TODO: not working :(
   // This mess... tries to resolve random extra jmps that can get generated with certain compiler options
-  let result = decoder.instruction_iterator(bytes, offset)
+  let result = decoder.decode_all(bytes, offset)
   .flat_map(|(insn, ip)|
     get_jmpcall_address(&insn, &ip).map(|target_addr| {
       let target_addr_pos = target_addr as usize;
-      decoder.decode(&bytes[target_addr_pos .. target_addr_pos + 5])
+      decoder.decode_first(&bytes[target_addr_pos .. target_addr_pos + 5])
         .unwrap_or_default()
         .filter(|insn|insn.mnemonic == Mnemonic::JMP && is_imm_jmpcall(insn))
         .map(|insn| get_jmpcall_address(&insn, &target_addr).map(
@@ -98,11 +113,15 @@ pub fn write_disasm(
   let mut disasm_extra = DisasmExtra {
     opts: disasm_opts.clone(),
     fn_map: fn_map.clone(),
+    offset: offset,
   };
 
-  for (insn, ip) in decoder.instruction_iterator(bytes, offset) {
+  for insn_info in decoder.decode_all::<VisibleOperands>(bytes, offset) {
+    let (ip, _, insn) = insn_info.unwrap();
+
+    disasm_extra.offset = ip; // BUG: Formatter is not propagating the instruction pointer
     formatter
-      .format_instruction(&insn, &mut buf, Some(ip), Some(&mut disasm_extra))
+      .format_ex(Some(ip), &insn, &mut buf, Some(&mut disasm_extra))
       .map_err(DisasmError::ZydisError)?;
 
     let insn_str = buf.as_str().expect("not utf8");
@@ -122,33 +141,34 @@ fn cleanup_name(name: &str) -> &str {
 }
 
 fn format_addrs(
-  _: &Formatter,
+  _: &Formatter<DisasmExtra>,
   buf: &mut FormatterBuffer,
   ctx: &mut FormatterContext,
-  disasm_opts: Option<&mut dyn Any>,
+  disasm_opts: Option<&mut DisasmExtra>,
 ) -> ZydisResult<()> {
-  let extra = disasm_opts.unwrap().downcast_ref::<DisasmExtra>().unwrap();
-
+  
   unsafe {
+    let opts = disasm_opts.unwrap();
     let op = &*ctx.operand;
     let insn = &*ctx.instruction;
 
-    match op.ty {
-      OperandType::MEMORY => {
-        if extra.opts.show_mem_disp {
-          if insn.opcode == 0xFF && [2, 3].contains(&insn.raw.modrm_reg) {
+    match &op.kind {
+      DecodedOperandKind::Mem(mem) => {
+        if mem.disp.has_displacement {
+          if insn.opcode == 0xFF && [2, 3].contains(&insn.raw.modrm.reg) {
             buf.append_str("<indir_fn>")? // hide function call addresses, 0xFF /3 = CALL m16:32)
           } else {
-            buf.append_str(&format!("{:#X}", op.mem.disp.displacement))?
+            buf.append_str(&format!("{:#X}", mem.disp.displacement))?
           }
         } else {
           buf.append_str("<indir_addr>")?
         }
       }
-      OperandType::IMMEDIATE => match insn.opcode {
+      DecodedOperandKind::Imm(imm) => match insn.opcode {
         0xE8 => {
-          let target_addr = ctx.runtime_address.wrapping_add(op.imm.value) + u64::from(insn.length);
-          let func = extra.fn_map.get(&target_addr);
+          let target_addr = insn.calc_absolute_address(opts.offset, op)?;
+          //let target_addr = (opts.offset + ctx.runtime_address).wrapping_add(imm.value) + u64::from(insn.length);
+          let func = opts.fn_map.get(&target_addr);
           // TODO Problem with calls to anonymous `jmp <addr>` which calls the actual function
 
           buf.append_str(
@@ -156,16 +176,16 @@ fn format_addrs(
           )?
         },
         _ => {
-          if op.imm.is_relative {
+          if imm.is_relative {
             buf.append_str("$")?;
           } else {
             buf.append_str("<imm_addr>")?;
             return Ok(());
           }
-          if op.imm.is_signed {
-            buf.append_str(&format!("{:+#X}", CustomUpperHexFormat(op.imm.value as i64)))?;
+          if imm.is_signed {
+            buf.append_str(&format!("{:+#X}", CustomUpperHexFormat(imm.value as i64)))?;
           } else {
-            buf.append_str(&format!("{:+#X}", op.imm.value))?;
+            buf.append_str(&format!("{:+#X}", imm.value))?;
           }
         }
       },
@@ -177,28 +197,32 @@ fn format_addrs(
 }
 
 fn void_format_disp(
-  _: &Formatter,
+  _: &Formatter<DisasmExtra>,
   buf: &mut FormatterBuffer,
   ctx: &mut FormatterContext,
-  _: Option<&mut dyn Any>,
+  _: Option<&mut DisasmExtra>,
 ) -> ZydisResult<()> {
   unsafe {
     let op = &*ctx.operand;
-    if op.mem.disp.has_displacement {
-      // only write the displacement if it's actually displacing
-      // not the case for something like `mov bl, [eax]`, i.e. `mov bl, [eax+0x0]`
-      buf.append_str(if op.mem.disp.displacement < 0 { "-" } else { "+" })?;
-      buf.append_str(&format!("<disp{}>", op.size))?;
+
+    match &op.kind {
+      DecodedOperandKind::Mem(mem) if mem.disp.has_displacement => {
+        // only write the displacement if it's actually displacing
+        // not the case for something like `mov bl, [eax]`, i.e. `mov bl, [eax+0x0]`
+        buf.append_str(if mem.disp.displacement < 0 { "-" } else { "+" })?;
+        buf.append_str(&format!("<disp{}>", op.size))?;
+      }
+      _ => {}
     }
   }
   Ok(())
 }
 
 fn void_format_imms(
-  _: &Formatter,
+  _: &Formatter<DisasmExtra>,
   buf: &mut FormatterBuffer,
   ctx: &mut FormatterContext,
-  _: Option<&mut dyn Any>,
+  _: Option<&mut DisasmExtra>,
 ) -> ZydisResult<()> {
   unsafe {
     let op = &*ctx.operand;

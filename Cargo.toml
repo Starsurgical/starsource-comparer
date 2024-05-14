@@ -1,17 +1,17 @@
 [package]
 name = "starsource-comparer"
-version = "0.5.0"
-authors = ["Dennis Duda <git@seri.tools>"]
-edition = '2018'
+version = "1.0.0"
+authors = ["Dennis Duda <git@seri.tools>", "Adam Heinermann"]
+edition = '2021'
 
 [dependencies]
-zydis = "3.0.0"
-notify = "4"
-clap = "2"
-regex = "1.8.3"
+zydis = "4.1.1"
+notify = "6"
+clap = { version = "4", features = ["derive"] }
+regex = "1.10.4"
 num-traits = "0.2"
 serde = { version = "1", features = ["derive"] }
-toml = "0.5"
-pdb-addr2line = "0.10.4"
+toml = "0.8"
+pdb-addr2line = "0.11.0"
 thiserror = "1.0"
-itertools = "0.10.5"
+itertools = "0.12.1"
