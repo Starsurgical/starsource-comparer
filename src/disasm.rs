@@ -117,6 +117,10 @@ pub fn write_disasm(
   Ok(())
 }
 
+fn cleanup_name(name: &str) -> &str {
+  name.splitn(2, '(').next().unwrap_or(name)
+}
+
 fn format_addrs(
   _: &Formatter,
   buf: &mut FormatterBuffer,
@@ -148,7 +152,7 @@ fn format_addrs(
           // TODO Problem with calls to anonymous `jmp <addr>` which calls the actual function
 
           buf.append_str(
-            func.map_or(format!("{:#X}", target_addr).as_str(), |func| func.name.as_str()),
+            func.map_or(format!("{:#X}", target_addr).as_str(), |func|cleanup_name(func.name.as_str())),
           )?
         },
         _ => {
