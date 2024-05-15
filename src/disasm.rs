@@ -30,36 +30,6 @@ pub enum DisasmError {
   ZydisError(Status),
 }
 
-fn is_imm_jmpcall(insn: &Instruction<VisibleOperands>) -> bool {
-  match insn.mnemonic {
-    Mnemonic::JMP | Mnemonic::CALL if insn.raw.imm.len() > 0 => true,
-    _ => false
-  }
-  /*
-  match insn.mnemonic {
-    Mnemonic::JMP | Mnemonic::CALL if insn.operand_count > 0 => {
-      match &insn.operands()[0].kind {
-        DecodedOperandKind::Imm(imm) => {
-          true
-        }
-        _ => false
-      }
-    }
-    _ => false
-  } */
-}
-
-// If the decoded instruction is an immediate call or jmp instruction,
-// then return the target address.
-fn get_jmpcall_address(insn: &Instruction<VisibleOperands>, ip: &u64) -> Option<u64> {
-  if is_imm_jmpcall(insn) {
-    insn.calc_absolute_address(*ip, &insn.operands()[0]).ok()
-  }
-  else {
-    None
-  }
-}
-
 pub fn write_disasm(
   writer: &mut impl Write,
   bytes: &[u8],
@@ -87,25 +57,37 @@ pub fn write_disasm(
       .map_err(DisasmError::ZydisError)?;
   }
 
-  // FIXME: Decoder::new32()
   let decoder = Decoder::new32();
 
   /*
-  // TODO: not working :(
-  // This mess... tries to resolve random extra jmps that can get generated with certain compiler options
-  let result = decoder.decode_all(bytes, offset)
-  .flat_map(|(insn, ip)|
-    get_jmpcall_address(&insn, &ip).map(|target_addr| {
-      let target_addr_pos = target_addr as usize;
-      decoder.decode_first(&bytes[target_addr_pos .. target_addr_pos + 5])
-        .unwrap_or_default()
-        .filter(|insn|insn.mnemonic == Mnemonic::JMP && is_imm_jmpcall(insn))
-        .map(|insn| get_jmpcall_address(&insn, &target_addr).map(
-          |real_addr| fn_map.get(&real_addr).map(|func| (target_addr,func.clone()))
-        ).flatten()).flatten()
-    }).flatten()
-  );
+  // TODO: We can't access other functions because bytes are only for our current function
+  let decoder = Decoder::new32();
+  for insn_info in decoder.decode_all::<VisibleOperands>(bytes, offset) {
+    let (ip, _, insn) = insn_info.unwrap();
 
+    match insn.mnemonic {
+      Mnemonic::JMP | Mnemonic::CALL if insn.raw.imm.len() > 0 => {
+        let target_addr = insn.calc_absolute_address(ip, &insn.operands()[0]).unwrap();
+        if fn_map.contains_key(&target_addr) {
+          continue;
+        }
+        
+        println!("{target_addr:X}\n");
+
+        let target_addr_pos = target_addr as usize;
+        // TODO: This can't work because the bytes are ONLY for the function we are working in
+        //decoder.decode_first(???);
+
+        // TODO: finish
+        // 1. Decode the new target_addr instruction.
+        // 2. Check if it's a JMP.
+        // 3. Get its next target address.
+        // 4. Copy the new address's name mapping to the original target address.
+      }
+      _ => {}
+    }
+  }
+  
   let mut bigger_fn_map = fn_map.clone();
   bigger_fn_map.extend(result);
   */
