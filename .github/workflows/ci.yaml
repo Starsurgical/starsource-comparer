@@ -1,0 +1,43 @@
+name: CI
+
+# This workflow run tests and build for each push
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+  schedule: [cron: "0 11 * * *"] # at 4am PST, 11am UTC
+
+permissions:
+  contents: read
+
+env:
+  RUSTFLAGS: -Dwarnings
+
+jobs:
+  test:
+    timeout-minutes: 120
+    name: ${{format('{0}, {1}, {2},', matrix.rust, matrix.profile, matrix.target)}}
+    runs-on: self-hosted
+    strategy:
+      fail-fast: false
+      matrix:
+        rust: [beta, stable]
+        profile: [dev, release]
+        target: [x86_64-unknown-linux-gnu] # x86_64-pc-windows-msvc cross compiling not support by zydis
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{matrix.rust}}
+          components: clippy, rustfmt, rust-src
+          targets: wasm32-unknown-unknown, x86_64-pc-windows-msvc
+
+      - name: compiler check
+        run: cargo check --target ${{matrix.target}} --profile=${{matrix.profile}}
+
+      - name: compiler build
+        run: cargo build --target ${{matrix.target}} --profile=${{matrix.profile}}
+
+      - name: clippy
+        run: cargo clippy --target ${{matrix.target}} --profile=${{matrix.profile}} -- -D clippy::all
