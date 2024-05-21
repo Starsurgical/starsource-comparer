@@ -4,7 +4,7 @@ use std::io::{Error as IoError, Write};
 
 use zydis::ffi::{DecodedOperandKind, FormatterBuffer, FormatterContext};
 use zydis::{
-  Decoder, Formatter, FormatterStyle, Instruction, Mnemonic, OutputBuffer, Result as ZydisResult, Status, VisibleOperands
+  Decoder, Formatter, FormatterStyle, OutputBuffer, Result as ZydisResult, Status, VisibleOperands
 };
 
 use super::comparer_config::FunctionDefinition;

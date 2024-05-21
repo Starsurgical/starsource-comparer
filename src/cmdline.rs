@@ -126,22 +126,6 @@ pub fn parse_cmdline() -> Command {
   }
 }
 
-// #[allow(unknown_lints)]
-// #[allow(needless_pass_by_value)] // clap returns an owned string
-// fn is_vaild_number(v: String) -> Result<(), String> {
-//     parse_hex(&v)
-//         .map(|_| ())
-//         .map_err(|_| "Argument has to be a decimal or hex (0xDEADBEEF) number.".into())
-// }
-
-// fn parse_hex(v: &str) -> Result<u64, std::num::ParseIntError> {
-//     if v.starts_with("0x") {
-//         u64::from_str_radix(&v[2..], 16)
-//     } else {
-//         u64::from_str_radix(&v, 10)
-//     }
-// }
-
 fn file_exists(path: &OsStr) -> Result<(), OsString> {
   let p = Path::new(path);
   if p.exists() && p.is_file() {
