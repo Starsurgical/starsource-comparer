@@ -1,5 +1,8 @@
 use clap::{Args, Parser, Subcommand};
-use std::path::PathBuf;
+use std::{
+  ffi::{OsStr, OsString},
+  path::{Path, PathBuf},
+};
 
 use super::{Command, CompareCommandInfo, CompareOpts, DisasmOpts, GenerateFullCommandInfo};
 
@@ -118,5 +121,15 @@ pub fn parse_cmdline() -> Command {
   match &cli.command {
     Commands::GenerateFull(args) => Command::GenerateFull(cli.parse_generate_full_args(args)),
     Commands::Compare(args) => Command::Compare(cli.parse_compare_args(args)),
+  }
+}
+
+#[allow(dead_code)]
+fn file_exists(path: &OsStr) -> Result<(), OsString> {
+  let p = Path::new(path);
+  if p.exists() && p.is_file() {
+    Ok(())
+  } else {
+    Err(OsString::from("The file specified does not exist"))
   }
 }

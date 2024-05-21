@@ -17,6 +17,8 @@ pub struct DisasmOpts {
 
 #[derive(Debug, Clone)]
 struct DisasmExtra {
+  #[allow(dead_code)]
+  pub opts: DisasmOpts,
   pub fn_map: HashMap<u64, FunctionDefinition>,
   pub offset: u64,
 }
@@ -90,6 +92,7 @@ pub fn write_disasm(
   */
 
   let mut disasm_extra = DisasmExtra {
+    opts: disasm_opts.clone(),
     fn_map: fn_map.clone(),
     offset,
   };
