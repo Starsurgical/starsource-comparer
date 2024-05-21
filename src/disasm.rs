@@ -3,9 +3,7 @@ use std::fmt::Debug;
 use std::io::{Error as IoError, Write};
 
 use zydis::ffi::{DecodedOperandKind, FormatterBuffer, FormatterContext};
-use zydis::{
-  Decoder, Formatter, FormatterStyle, OutputBuffer, Result as ZydisResult, Status, VisibleOperands
-};
+use zydis::{Decoder, Formatter, FormatterStyle, OutputBuffer, Result as ZydisResult, Status, VisibleOperands};
 
 use super::comparer_config::FunctionDefinition;
 use super::hexformat::*;
@@ -71,7 +69,7 @@ pub fn write_disasm(
         if fn_map.contains_key(&target_addr) {
           continue;
         }
-        
+
         println!("{target_addr:X}\n");
 
         let target_addr_pos = target_addr as usize;
@@ -87,7 +85,7 @@ pub fn write_disasm(
       _ => {}
     }
   }
-  
+
   let mut bigger_fn_map = fn_map.clone();
   bigger_fn_map.extend(result);
   */
@@ -128,7 +126,6 @@ fn format_addrs(
   ctx: &mut FormatterContext,
   disasm_opts: Option<&mut DisasmExtra>,
 ) -> ZydisResult<()> {
-  
   unsafe {
     let opts = disasm_opts.unwrap();
     let op = &*ctx.operand;
@@ -153,10 +150,10 @@ fn format_addrs(
           let func = opts.fn_map.get(&target_addr);
           // TODO Problem with calls to anonymous `jmp <addr>` which calls the actual function
 
-          buf.append_str(
-            func.map_or(format!("{:#X}", target_addr).as_str(), |func|cleanup_name(func.name.as_str())),
-          )?
-        },
+          buf.append_str(func.map_or(format!("{:#X}", target_addr).as_str(), |func| {
+            cleanup_name(func.name.as_str())
+          }))?
+        }
         _ => {
           if imm.is_relative {
             buf.append_str("$")?;

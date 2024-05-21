@@ -26,7 +26,7 @@ struct Cli {
   /// Hides all immediate values. Use with caution.
   #[arg(long = "no-imms")]
   no_imms: bool,
-  
+
   /// Truncate the number bytes disassembled in the compared binary to the length of the
   /// original function instead of the reported length in the pdb file.
   #[arg(long = "truncate-to-original")]
@@ -45,7 +45,7 @@ impl Cli {
       truncate_to_original: self.truncate_to_original,
     }
   }
-  
+
   fn parse_disasm_opts(&self) -> DisasmOpts {
     DisasmOpts {
       print_adresses: self.show_ip,
@@ -57,7 +57,7 @@ impl Cli {
   fn parse_compare_args(&self, args: &CompareArgs) -> CompareCommandInfo {
     let compare_file_path: PathBuf = PathBuf::from(&args.starsource_file);
     let compare_pdb_file = compare_file_path.with_extension("pdb");
-  
+
     CompareCommandInfo {
       compare_opts: CompareOpts {
         orig: PathBuf::from(&args.starcraft_file),
@@ -94,13 +94,13 @@ struct CompareArgs {
 
 #[derive(Args)]
 struct GenerateFullArgs {
-    /// The file to generate the disassembly output for.
-    file: String,
+  /// The file to generate the disassembly output for.
+  file: String,
 
-    /// Generate the file for the original binary for all functions defined within
-    /// comparer-config.toml, skipping functions without defined sizes.
-    #[arg(long = "orig-file")]
-    orig_file: bool,
+  /// Generate the file for the original binary for all functions defined within
+  /// comparer-config.toml, skipping functions without defined sizes.
+  #[arg(long = "orig-file")]
+  orig_file: bool,
 }
 
 #[derive(Subcommand)]
@@ -117,12 +117,8 @@ pub fn parse_cmdline() -> Command {
   let cli = Cli::parse();
 
   match &cli.command {
-    Commands::GenerateFull(args) => {
-      Command::GenerateFull(cli.parse_generate_full_args(args))
-    },
-    Commands::Compare(args) => {
-      Command::Compare(cli.parse_compare_args(args))
-    }
+    Commands::GenerateFull(args) => Command::GenerateFull(cli.parse_generate_full_args(args)),
+    Commands::Compare(args) => Command::Compare(cli.parse_compare_args(args)),
   }
 }
 
