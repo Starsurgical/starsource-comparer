@@ -68,7 +68,7 @@ pub fn run(mut info: CompareCommandInfo, cfg: &ComparerConfig) -> Result<(), Com
     .find(|s| s.name == info.compare_opts.debug_symbol)
     .ok_or(ConfigSymbolNotFound)?;
 
-  if orig_fn.size == None {
+  if orig_fn.size.is_none() {
     if info.truncate_to_original {
       return Err(RequiredFunctionSizeNotFoundError(orig_fn.name.clone()));
     } else {

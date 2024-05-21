@@ -88,8 +88,8 @@ fn generate_full_pdb(info: GenerateFullCommandInfo, cfg: &ComparerConfig) -> Res
 
   let mut pdb_funcs: HashMap<String, FunctionSymbol> = get_pdb_funcs(pdb_path).map_err(PdbError)?;
   let pdb_fn_map = pdb_funcs
-    .iter()
-    .map(|(_, func)| func.as_function_definition_pair())
+    .values()
+    .map(|func| func.as_function_definition_pair())
     .collect::<HashMap<_, _>>();
 
   let mut path = std::env::current_dir().map_err(IoError)?;

@@ -25,10 +25,8 @@ pub enum ComparerConfigError {
 
 impl ComparerConfig {
   fn read_from_file(path: impl AsRef<Path>) -> Result<Self, ComparerConfigError> {
-    Ok(
-      toml::from_str::<Self>(&std::fs::read_to_string(path).map_err(ComparerConfigError::IoError)?)
-        .map_err(ComparerConfigError::ParseError)?,
-    )
+    toml::from_str::<Self>(&std::fs::read_to_string(path).map_err(ComparerConfigError::IoError)?)
+      .map_err(ComparerConfigError::ParseError)
   }
 
   pub fn read_default() -> Result<Self, ComparerConfigError> {
