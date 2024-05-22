@@ -19,7 +19,10 @@ pub struct FunctionDefinition {
 
 #[derive(Debug)]
 pub enum ComparerConfigError {
+  #[allow(dead_code)]
   IoError(std::io::Error),
+
+  #[allow(dead_code)]
   ParseError(toml::de::Error),
 }
 
