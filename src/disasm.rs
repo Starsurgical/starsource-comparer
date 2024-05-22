@@ -17,6 +17,7 @@ pub struct DisasmOpts {
 
 #[derive(Debug, Clone)]
 struct DisasmExtra {
+  #[allow(dead_code)]
   pub opts: DisasmOpts,
   pub fn_map: HashMap<u64, FunctionDefinition>,
   pub offset: u64,
@@ -93,7 +94,7 @@ pub fn write_disasm(
   let mut disasm_extra = DisasmExtra {
     opts: disasm_opts.clone(),
     fn_map: fn_map.clone(),
-    offset: offset,
+    offset,
   };
 
   for insn_info in decoder.decode_all::<VisibleOperands>(bytes, offset) {
@@ -117,7 +118,7 @@ pub fn write_disasm(
 }
 
 fn cleanup_name(name: &str) -> &str {
-  name.splitn(2, '(').next().unwrap_or(name)
+  name.split('(').next().unwrap_or(name)
 }
 
 fn format_addrs(
