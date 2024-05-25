@@ -6,7 +6,7 @@ on:
   push:
   pull_request:
   workflow_dispatch:
-  schedule: [cron: "0 11 * * *"] # at 4am PST, 11am UTC
+  # schedule: [cron: "0 11 * * *"] # at 4am PST, 11am UTC
 
 permissions:
   contents: read
