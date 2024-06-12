@@ -144,10 +144,9 @@ fn run_disassemble(
       }
 
       if let Some(orig_size) = orig_fn.size {
-        println!("; orig size: {:#X}", orig_size);
-      } else {
-        println!();
+        print!("; orig size: {:#X}", orig_size);
       }
+      println!();
 
       info.last_offset_size = Some((addr, size));
       Ok(())
@@ -164,10 +163,7 @@ fn write_compare(
 ) -> Result<(u64, usize), CompareError> {
   let pdb_funcs = get_pdb_funcs(&info.compare_opts.compare_pdb_file).map_err(PdbError)?;
   let FunctionSymbol { offset, size, .. } = pdb_funcs.get(&info.compare_opts.debug_symbol).ok_or(SymbolNotFound)?;
-  let pdb_fn_map = pdb_funcs
-    .values()
-    .map(|func| func.as_function_definition_pair())
-    .collect::<HashMap<_, _>>();
+  let pdb_fn_map = get_pdb_fn_map(&info.compare_opts.compare_file_path, &pdb_funcs);
 
   let mut orig_function_bytes = if let Some(orig_size) = orig_fn.size {
     vec![0; orig_size]
@@ -195,47 +191,44 @@ fn write_compare(
     *offset,
   )?;
 
-  let curdir = std::env::current_dir().map_err(IoError)?;
-
-  let mut path = curdir.clone();
-  path.push("orig.asm");
-  File::create(path)
-    .map(BufWriter::new)
-    .map_err(IoError)
-    .and_then(|mut buf_writer| {
-      write_disasm(
-        &mut buf_writer,
-        &orig_function_bytes,
-        &info.disasm_opts,
-        orig_fn.addr,
-        orig_fn_map,
-      )
-      .map_err(DisasmError)?;
-
-      Ok(())
-    })?;
+  write_disassembly("orig.asm", &orig_function_bytes, info, orig_fn.addr, orig_fn_map)?;
 
   let addr = offset + PDB_SEGMENT_OFFSET;
+  write_disassembly("compare.asm", &compare_function_bytes, info, addr, &pdb_fn_map)?;
 
-  let mut path = curdir;
-  path.push("compare.asm");
+  Ok((addr, *size))
+}
+
+fn get_pdb_fn_map(
+  _path: impl AsRef<Path>,
+  pdb_funcs: &HashMap<String, FunctionSymbol>,
+) -> HashMap<u64, FunctionDefinition> {
+  pdb_funcs
+    .values()
+    .map(|func| func.as_function_definition_pair())
+    .collect::<HashMap<_, _>>()
+}
+
+fn write_disassembly(
+  filename: &str,
+  function_bytes: &[u8],
+  info: &mut CompareCommandInfo,
+  addr: u64,
+  fn_map: &HashMap<u64, FunctionDefinition>,
+) -> Result<(), CompareError> {
+  let mut path = std::env::current_dir().map_err(IoError)?;
+  path.push(filename);
+
   File::create(path)
     .map(BufWriter::new)
     .map_err(IoError)
     .and_then(|mut buf_writer| {
-      write_disasm(
-        &mut buf_writer,
-        &compare_function_bytes,
-        &info.disasm_opts,
-        addr,
-        &pdb_fn_map,
-      )
-      .map_err(DisasmError)?;
+      write_disasm(&mut buf_writer, function_bytes, &info.disasm_opts, addr, fn_map).map_err(DisasmError)?;
 
       Ok(())
     })?;
 
-  Ok((addr, *size))
+  Ok(())
 }
 
 fn read_file_into(buffer: &mut [u8], path: impl AsRef<Path>, offset: u64) -> Result<(), CompareError> {

@@ -87,6 +87,9 @@ Options:
 
 ## Compiling
 ```
-cargo build
+cargo fmt
+cargo check
+cargo clippy -- -D clippy::all
+cargo build --release
 ```
 
