@@ -126,20 +126,21 @@ fn run_disassemble(
   orig_fn_map: &HashMap<u64, FunctionDefinition>,
 ) -> Result<(), CompareError> {
   match write_compare(info, orig_addr_offset, orig_fn, orig_fn_map) {
-    Ok((addr, size)) => {
+    Ok(FunctionSymbol { file, offset, size, .. }) => {
       if let Some((old_addr, old_size)) = info.last_offset_size {
         print!(
-          "Found {} at {:#X} ({:+#X}), size: {:#X} ({:+#X})",
+          "Found {} in {} at {:#X} ({:+#X}), size: {:#X} ({:+#X})",
           &info.compare_opts.debug_symbol,
-          addr,
-          CustomUpperHexFormat((addr as i64) - (old_addr as i64)),
+          file,
+          offset,
+          CustomUpperHexFormat((offset as i64) - (old_addr as i64)),
           size,
           CustomUpperHexFormat((size as i64) - (old_size as i64)),
         );
       } else {
         print!(
-          "Found {} at {:#X}, size: {:#X}",
-          &info.compare_opts.debug_symbol, addr, size,
+          "Found {} in {} at {:#X}, size: {:#X}",
+          &info.compare_opts.debug_symbol, file, offset, size,
         );
       }
 
@@ -148,7 +149,7 @@ fn run_disassemble(
       }
       println!();
 
-      info.last_offset_size = Some((addr, size));
+      info.last_offset_size = Some((offset, size));
       Ok(())
     }
     Err(e) => Err(e),
@@ -160,15 +161,15 @@ fn write_compare(
   orig_addr_offset: u64,
   orig_fn: &FunctionDefinition,
   orig_fn_map: &HashMap<u64, FunctionDefinition>,
-) -> Result<(u64, usize), CompareError> {
+) -> Result<FunctionSymbol, CompareError> {
   let pdb_funcs = get_pdb_funcs(&info.compare_opts.compare_pdb_file).map_err(PdbError)?;
-  let FunctionSymbol { offset, size, .. } = pdb_funcs.get(&info.compare_opts.debug_symbol).ok_or(SymbolNotFound)?;
+  let fn_sym = pdb_funcs.get(&info.compare_opts.debug_symbol).ok_or(SymbolNotFound)?;
   let pdb_fn_map = get_pdb_fn_map(&info.compare_opts.compare_file_path, &pdb_funcs);
 
   let mut orig_function_bytes = if let Some(orig_size) = orig_fn.size {
     vec![0; orig_size]
   } else {
-    vec![0; *size]
+    vec![0; fn_sym.size]
   };
 
   let mut compare_function_bytes = if info.truncate_to_original {
@@ -179,7 +180,7 @@ fn write_compare(
         .expect("orig size is None even though truncate_to_original is set. Initial check was wrong!")
     ]
   } else {
-    vec![0; *size]
+    vec![0; fn_sym.size]
   };
 
   let orig_offset = orig_fn.addr - orig_addr_offset;
@@ -188,15 +189,15 @@ fn write_compare(
   read_file_into(
     &mut compare_function_bytes,
     &info.compare_opts.compare_file_path,
-    *offset,
+    fn_sym.offset,
   )?;
 
   write_disassembly("orig.asm", &orig_function_bytes, info, orig_fn.addr, orig_fn_map)?;
 
-  let addr = offset + PDB_SEGMENT_OFFSET;
+  let addr = fn_sym.offset + PDB_SEGMENT_OFFSET;
   write_disassembly("compare.asm", &compare_function_bytes, info, addr, &pdb_fn_map)?;
 
-  Ok((addr, *size))
+  Ok(fn_sym.clone())
 }
 
 fn get_pdb_fn_map(

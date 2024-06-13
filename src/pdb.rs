@@ -1,3 +1,4 @@
+use itertools::Itertools;
 use pdb_addr2line::pdb;
 use regex::Regex;
 use std::collections::HashMap;
@@ -21,9 +22,10 @@ pub enum PdbError {
   Pdb(#[from] pdb_addr2line::pdb::Error),
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct FunctionSymbol {
   pub name: String,
+  pub file: String,
   pub offset: u64,
   pub size: usize,
 }
@@ -43,12 +45,27 @@ impl FunctionSymbol {
   }
 }
 
-fn to_function_symbol(data: pdb_addr2line::Function) -> FunctionSymbol {
-  FunctionSymbol {
+fn to_function_symbol(
+  context: &pdb_addr2line::Context,
+  data: pdb_addr2line::Function,
+) -> Result<FunctionSymbol, PdbError> {
+  let filemap = context
+    .find_frames(data.start_rva)?
+    .map(|procedure_frames| {
+      procedure_frames
+        .frames
+        .iter()
+        .flat_map(|frame| frame.file.clone())
+        .collect_vec()
+    })
+    .unwrap_or_default();
+
+  Ok(FunctionSymbol {
     name: data.name.unwrap(),
+    file: filemap.first().map_or("UNKNOWN".to_string(), |s| s.to_string()),
     offset: (data.start_rva - 0xC00) as u64,
     size: (data.end_rva.unwrap_or(data.start_rva) - data.start_rva) as usize,
-  }
+  })
 }
 
 fn demangle_function_name(name: String) -> String {
@@ -68,7 +85,7 @@ pub fn get_pdb_funcs(file: impl AsRef<Path>) -> Result<HashMap<String, FunctionS
 
   let mut ret = HashMap::new();
   for function in context.functions() {
-    let fun = to_function_symbol(function);
+    let fun = to_function_symbol(&context, function)?;
     let name = demangle_function_name(fun.name.clone());
     ret.insert(name, fun);
   }
