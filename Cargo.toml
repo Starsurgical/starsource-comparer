@@ -6,11 +6,13 @@ edition = '2021'
 
 [dependencies]
 clap = { version = "4", features = ["derive"] }
+handlebars = "5.1.2"
 itertools = "0.13.0"
 notify = "6"
 num-traits = "0.2"
 pdb-addr2line = "0.11.0"
 regex = "1.10.4"
+rust-embed = { version = "8.4.0", features = ["debug-embed", "compression"] }
 serde = { version = "1", features = ["derive"] }
 thiserror = "1.0"
 toml = "0.8"

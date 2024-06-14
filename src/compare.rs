@@ -200,7 +200,7 @@ fn write_compare(
   Ok(fn_sym.clone())
 }
 
-fn get_pdb_fn_map(
+pub fn get_pdb_fn_map(
   _path: impl AsRef<Path>,
   pdb_funcs: &HashMap<String, FunctionSymbol>,
 ) -> HashMap<u64, FunctionDefinition> {

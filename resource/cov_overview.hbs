@@ -1,0 +1,31 @@
+<table cellpadding="1" border="0" width="100%">
+  <tbody>
+    <tr>
+      <td width="10%" class="headerItem">Current view:</td>
+      <td width="35%" class="headerValue">{{ viewpath }}</td>
+      <td width="5%"></td>
+      <td width="15%"></td>
+      <td width="10%" class="headerCovTableHead">Matches</td>
+      <td width="10%" class="headerCovTableHead">Total</td>
+      <td width="15%" class="headerCovTableHead">Equivalence</td>
+    </tr>
+    <tr>
+      <td class="headerItem">Original file:</td>
+      <td class="headerValue">{{ orig_filename }}{{#if orig_version}} ({{orig_version}}){{/if}}</td>
+      <td></td>
+      <td class="headerItem">Functions:</td>
+      <td class="headerCovTableEntry">{{ functions_matching }}</td>
+      <td class="headerCovTableEntry">{{ functions_total }}</td>
+      <td class="headerCovTableEntry{{ functions_level }}">{{ functions_percent }} %</td>
+    </tr>
+    <tr>
+      <td class="headerItem">Date:</td>
+      <td class="headerValue">{{ date }}</td>
+      <td></td>
+      <td class="headerItem">Order:</td>
+      <td class="headerCovTableEntry">{{ order_matching }}</td>
+      <td class="headerCovTableEntry">{{ order_total }}</td>
+      <td class="headerCovTableEntry{{ order_level }}">{{ order_percent }} %</td>
+    </tr>
+  </tbody>
+</table>
