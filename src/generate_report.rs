@@ -3,9 +3,12 @@ use std::{collections::HashMap, path::PathBuf};
 use handlebars::Handlebars;
 use itertools::Itertools;
 
+use super::compare::get_pdb_fn_map;
+
 use self::GenerateReportError::*;
 use super::assets::*;
 use super::comparer_config::*;
+use super::disasm::*;
 use super::pdb::*;
 
 #[derive(Debug)]
@@ -25,19 +28,16 @@ pub struct GenerateReportOpts {
 #[derive(Debug)]
 pub enum GenerateReportError {
   PdbError(super::pdb::PdbError),
-  ConfigSymbolNotFound,
-  SymbolNotFound,
   IoError(std::io::Error),
   DisasmError(super::disasm::DisasmError),
   RequiredFunctionSizeNotFoundError(String),
   TemplateError(handlebars::TemplateError),
+  FromUtf8Error(std::string::FromUtf8Error),
 }
 
 pub fn print_error(e: &GenerateReportError) {
   match e {
     PdbError(e) => println!("PDB file error: {:#?}", e),
-    ConfigSymbolNotFound => println!("Could not find the specified symbol in the config."),
-    SymbolNotFound => println!("Could not find the symbol in the PDB, skipping the file."),
     IoError(e) => println!("IO error: {:#?}", e),
     DisasmError(e) => println!("Zydis disassembly engine error: {:#?}", e),
     RequiredFunctionSizeNotFoundError(e) => println!(
@@ -45,25 +45,44 @@ pub fn print_error(e: &GenerateReportError) {
       e
     ),
     TemplateError(e) => println!("Failed to load web template. {}", e),
+    FromUtf8Error(e) => println!("Failed to convert disassembly to UTF-8 string. {}", e),
   }
 }
 
 #[derive(Debug, Clone)]
-pub struct DualFunctionReport {
-  pub name: String,
-  pub file: String,
-  pub new_addr: Option<u64>,
-  pub new_size: Option<usize>,
-  pub new_asm: String,
-  pub orig_addr: Option<u64>,
-  pub orig_size: Option<usize>,
+struct CompareResult {
   pub orig_asm: String,
+  pub new_asm: String,
   pub unified_diff: String,
   pub match_ratio: f64,
 }
 
+#[derive(Debug, Clone)]
+struct DualFunctionReport {
+  pub name: String,
+  pub file: String,
+  pub new_addr: Option<u64>,
+  pub new_size: Option<usize>,
+  pub orig_addr: Option<u64>,
+  pub orig_size: Option<usize>,
+  pub compare_result: Option<CompareResult>,
+}
+
+struct OrigData {
+  functions: HashMap<String, FunctionDefinition>,
+  fn_map: HashMap<u64, FunctionDefinition>,
+  file: Vec<u8>,
+  base_address: u64,
+}
+
+struct PdbData {
+  functions: HashMap<String, FunctionSymbol>,
+  fn_map: HashMap<u64, FunctionDefinition>,
+  file: Vec<u8>,
+}
+
 fn register_template(name: &str, handlebars: &mut Handlebars) -> Result<(), GenerateReportError> {
-  handlebars.register_template_string(name, load_asset_text_file(format!("{name}.hbs")));
+  handlebars.register_template_string(name, load_asset_text_file(format!("{name}.hbs"))).map_err(TemplateError)?;
   Ok(())
 }
 
@@ -71,12 +90,14 @@ pub fn run(info: &GenerateReportCommandInfo, cfg: &ComparerConfig) -> Result<(),
   let mut handlebars = Handlebars::new();
   handlebars.set_strict_mode(true);
 
-  register_template("cov_overview", &mut handlebars);
-  register_template("index_partial", &mut handlebars);
-  register_template("compare_partial", &mut handlebars);
-  register_template("webpage", &mut handlebars);
+  register_template("cov_overview", &mut handlebars)?;
+  register_template("index_partial", &mut handlebars)?;
+  register_template("compare_partial", &mut handlebars)?;
+  register_template("webpage", &mut handlebars)?;
 
   let report_data = create_report_data(info, cfg)?;
+
+  // TODO
 
   Ok(())
 }
@@ -89,34 +110,84 @@ fn get_orig_funcs(cfg: &ComparerConfig) -> HashMap<String, FunctionDefinition> {
 }
 
 fn create_report_data(info: &GenerateReportCommandInfo, cfg: &ComparerConfig) -> Result<Vec<DualFunctionReport>, GenerateReportError> {
-  let orig_fn_map = get_orig_funcs(cfg);
-  let pdb_funcs: HashMap<String, FunctionSymbol> = get_pdb_funcs(&info.report_opts.compare_pdb_file).map_err(PdbError)?;
+  let orig_functions = get_orig_funcs(cfg);
+  let orig_fn_map = orig_functions.values().map(|f| (f.addr, f.clone())).collect::<HashMap<_,_>>();
+  
+  let pdb_functions = get_pdb_funcs(&info.report_opts.compare_pdb_file).map_err(PdbError)?;
+  let pdb_fn_map = get_pdb_fn_map(&pdb_functions);
 
-  Ok(orig_fn_map.keys().chain(pdb_funcs.keys())
+  let orig = OrigData {
+    functions: orig_functions,
+    fn_map: orig_fn_map,
+    file: std::fs::read(&info.report_opts.orig).map_err(IoError)?,
+    base_address: cfg.address_offset,
+  };
+
+  let pdb = PdbData {
+    functions: pdb_functions,
+    fn_map: pdb_fn_map,
+    file: std::fs::read(&info.report_opts.compare_file_path).map_err(IoError)?,
+  };
+
+  Ok(orig.functions.keys().chain(pdb.functions.keys())
   .unique()
   .map(|fn_name|{
-    let orig = orig_fn_map.get(fn_name);
-    let pdb = pdb_funcs.get(fn_name);
+    let orig_fn = orig.functions.get(fn_name);
+    let pdb_fn = pdb.functions.get(fn_name);
 
-    let (orig_asm, new_asm, unified_diff, match_ratio) = create_comparison_data();
+    let compare_result = create_comparison_data(fn_name, &orig, &pdb, &info)
+    .inspect_err(print_error)
+    .ok();
 
     DualFunctionReport {
       name: fn_name.clone(),
-      file: pdb.map_or(String::from(""), |f| f.file.clone()),
-      new_addr: pdb.map(|f| f.offset),
-      new_size: pdb.map(|f| f.size),
-      new_asm: new_asm,
-      orig_addr: orig.map(|f| f.addr),
-      orig_size: orig.map(|f| f.size).flatten(),
-      orig_asm: orig_asm,
-      unified_diff: unified_diff,
-      match_ratio: match_ratio,
+      file: pdb_fn.map_or(String::from(""), |f| f.file.clone()),
+      new_addr: pdb_fn.map(|f| f.offset),
+      new_size: pdb_fn.map(|f| f.size),
+      orig_addr: orig_fn.map(|f| f.addr),
+      orig_size: orig_fn.map(|f| f.size).flatten(),
+      compare_result: compare_result,
     }
   }).collect())
 }
 
-fn create_comparison_data(fn_name: String, orig_fns: &HashMap<String, FunctionDefinition>, pdb_fns: &HashMap<String, FunctionSymbol>) -> (String, String, String, f64) {
+// Returns (original asm, new asm, unified diff, match ratio)
+fn create_comparison_data(fn_name: &String, orig: &OrigData, pdb: &PdbData, info: &GenerateReportCommandInfo) -> Result<CompareResult, GenerateReportError> {
+  let orig_fn = orig.functions.get(fn_name);
+  let pdb_fn = pdb.functions.get(fn_name);
 
+  let orig_fn_asm = match orig_fn {
+    Some(f) => {
+      let offset = (f.addr - orig.base_address) as usize;
+      let virt_addr = f.addr;
+      
+      let orig_fn_size = f.size
+      .or(pdb_fn.map(|f|f.size))
+      .ok_or(RequiredFunctionSizeNotFoundError(String::from("No function size provided")))?;
 
-  (String::from(""), String::from(""), String::from(""), 0f64)
+      let mut buf = Vec::new();
+      write_disasm(&mut buf, &orig.file[offset..offset+orig_fn_size], &info.disasm_opts, virt_addr, &orig.fn_map).map_err(DisasmError)?;
+      String::from_utf8(buf).map_err(FromUtf8Error)?
+    }
+    None => String::from("")
+  };
+
+  let pdb_fn_asm = match pdb_fn {
+    Some(f) => {
+      let offset = f.offset as usize;
+      let virt_addr = f.offset + PDB_SEGMENT_OFFSET;
+
+      let mut buf = Vec::new();
+      write_disasm(&mut buf, &pdb.file[offset..offset+f.size], &info.disasm_opts, virt_addr, &pdb.fn_map).map_err(DisasmError)?;
+      String::from_utf8(buf).map_err(FromUtf8Error)?
+    }
+    None => String::from("")
+  };
+
+  Ok(CompareResult {
+    orig_asm: orig_fn_asm,
+    new_asm: pdb_fn_asm,
+    unified_diff: String::from(""), // TODO
+    match_ratio: 0f64,  // TODO
+  })
 }

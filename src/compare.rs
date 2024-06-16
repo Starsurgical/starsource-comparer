@@ -164,7 +164,7 @@ fn write_compare(
 ) -> Result<FunctionSymbol, CompareError> {
   let pdb_funcs = get_pdb_funcs(&info.compare_opts.compare_pdb_file).map_err(PdbError)?;
   let fn_sym = pdb_funcs.get(&info.compare_opts.debug_symbol).ok_or(SymbolNotFound)?;
-  let pdb_fn_map = get_pdb_fn_map(&info.compare_opts.compare_file_path, &pdb_funcs);
+  let pdb_fn_map = get_pdb_fn_map(&pdb_funcs);
 
   let mut orig_function_bytes = if let Some(orig_size) = orig_fn.size {
     vec![0; orig_size]
@@ -200,10 +200,7 @@ fn write_compare(
   Ok(fn_sym.clone())
 }
 
-pub fn get_pdb_fn_map(
-  _path: impl AsRef<Path>,
-  pdb_funcs: &HashMap<String, FunctionSymbol>,
-) -> HashMap<u64, FunctionDefinition> {
+pub fn get_pdb_fn_map(pdb_funcs: &HashMap<String, FunctionSymbol>) -> HashMap<u64, FunctionDefinition> {
   pdb_funcs
     .values()
     .map(|func| func.as_function_definition_pair())
