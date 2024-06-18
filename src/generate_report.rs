@@ -1,7 +1,11 @@
+use std::path::Path;
 use std::{collections::HashMap, path::PathBuf};
 
+use common_path::common_path_all;
 use handlebars::Handlebars;
 use itertools::Itertools;
+use similar::Change;
+use similar::TextDiff;
 
 use super::compare::get_pdb_fn_map;
 
@@ -54,7 +58,8 @@ struct CompareResult {
   pub orig_asm: String,
   pub new_asm: String,
   pub unified_diff: String,
-  pub match_ratio: f64,
+  pub match_ratio: f32,
+  pub diff_html: String,
 }
 
 #[derive(Debug, Clone)]
@@ -66,6 +71,17 @@ struct DualFunctionReport {
   pub orig_addr: Option<u64>,
   pub orig_size: Option<usize>,
   pub compare_result: Option<CompareResult>,
+}
+
+struct PathReport {
+  pub path: String,
+  pub match_ratio: f32,
+  pub nodes: Vec<ReportNode>,
+}
+
+enum ReportNode {
+  Function(DualFunctionReport),
+  Path(PathReport),
 }
 
 struct OrigData {
@@ -100,6 +116,14 @@ pub fn run(info: &GenerateReportCommandInfo, cfg: &ComparerConfig) -> Result<(),
   // TODO
 
   Ok(())
+}
+
+fn structure_report_data(fns: &Vec<DualFunctionReport>) {
+  let common_path = common_path_all(fns.iter().map(|f|Path::new(&f.file))).unwrap_or_default();
+
+  // TODO think about implementation
+  // 1. group by path, removing the common path
+  // 2. convert to ReportNode for tree structure, iterating the Path pieces (recursive calls?)
 }
 
 fn get_orig_funcs(cfg: &ComparerConfig) -> HashMap<String, FunctionDefinition> {
@@ -151,7 +175,14 @@ fn create_report_data(info: &GenerateReportCommandInfo, cfg: &ComparerConfig) ->
   }).collect())
 }
 
-// Returns (original asm, new asm, unified diff, match ratio)
+fn create_change_line_html(change: Change<&str>) -> String {
+  match change.tag() {
+    similar::ChangeTag::Equal => format!(r#"<tr><td>{change}</td><td>{change}</td></tr>"#),
+    similar::ChangeTag::Delete => format!(r#"<tr><td class="code-delete">{change}</td><td></td></tr>"#),
+    similar::ChangeTag::Insert => format!(r#"<tr><td></td><td class="code-insert">{change}</td></tr>"#),
+  }
+}
+
 fn create_comparison_data(fn_name: &String, orig: &OrigData, pdb: &PdbData, info: &GenerateReportCommandInfo) -> Result<CompareResult, GenerateReportError> {
   let orig_fn = orig.functions.get(fn_name);
   let pdb_fn = pdb.functions.get(fn_name);
@@ -184,10 +215,13 @@ fn create_comparison_data(fn_name: &String, orig: &OrigData, pdb: &PdbData, info
     None => String::from("")
   };
 
+  let patch = TextDiff::from_lines(&orig_fn_asm, &pdb_fn_asm);
+
   Ok(CompareResult {
-    orig_asm: orig_fn_asm,
-    new_asm: pdb_fn_asm,
-    unified_diff: String::from(""), // TODO
-    match_ratio: 0f64,  // TODO
+    orig_asm: orig_fn_asm.clone(),
+    new_asm: pdb_fn_asm.clone(),
+    unified_diff: patch.unified_diff().to_string(),
+    match_ratio: patch.ratio(),
+    diff_html: patch.iter_all_changes().map(create_change_line_html).join("\n"),
   })
 }
