@@ -1,9 +1,12 @@
+use std::fs::File;
 use std::path::Path;
 use std::{collections::HashMap, path::PathBuf};
 
+use chrono::Utc;
 use common_path::common_path_all;
 use handlebars::Handlebars;
 use itertools::Itertools;
+use serde::Serialize;
 use similar::Change;
 use similar::TextDiff;
 
@@ -37,6 +40,7 @@ pub enum GenerateReportError {
   RequiredFunctionSizeNotFoundError(String),
   TemplateError(handlebars::TemplateError),
   FromUtf8Error(std::string::FromUtf8Error),
+  RenderError(handlebars::RenderError),
 }
 
 pub fn print_error(e: &GenerateReportError) {
@@ -50,6 +54,7 @@ pub fn print_error(e: &GenerateReportError) {
     ),
     TemplateError(e) => println!("Failed to load web template. {}", e),
     FromUtf8Error(e) => println!("Failed to convert disassembly to UTF-8 string. {}", e),
+    RenderError(e) => println!("Failed to render output. {}", e),
   }
 }
 
@@ -64,8 +69,8 @@ struct CompareResult {
 
 #[derive(Debug, Clone)]
 struct DualFunctionReport {
-  pub name: String,
-  pub file: String,
+  pub fn_name: String,
+  pub file: PathBuf,
   pub new_addr: Option<u64>,
   pub new_size: Option<usize>,
   pub orig_addr: Option<u64>,
@@ -73,9 +78,49 @@ struct DualFunctionReport {
   pub compare_result: Option<CompareResult>,
 }
 
+#[derive(Serialize)]
+struct ReportListItem {
+  htmlpath: String,
+  itemname: String,
+  order_arrow: String,
+  order_numdiff: i32,
+  match_level: String,
+  match_percent: f32,
+  matching: i32,
+  total: i32,
+}
+
+#[derive(Serialize)]
+struct ReportCommonInfo {
+  pub appname: String,
+  pub orig_filename: String,
+  pub orig_version: String,
+  pub date: String,
+}
+
+#[derive(Serialize)]
+struct ReportOverview {
+  pub common: ReportCommonInfo,
+  pub viewpath: String,
+  pub functions_matching: i32,
+  pub functions_total: i32, // should be num_total, num_matching etc. since in compare view it'll be number of lines
+  pub functions_level: String,
+  pub functions_percent: f32,
+  pub order_matching: i32,
+  pub order_total: i32,
+  pub order_level: String,
+  pub order_percent: f32,
+
+  pub page_content_partial: String,
+  pub index_items: Vec<ReportListItem>,
+  pub diff_html: String,
+}
+
 struct PathReport {
   pub path: String,
   pub match_ratio: f32,
+  pub num_matching_fns: i32,
+  pub total_fns: i32,
   pub nodes: Vec<ReportNode>,
 }
 
@@ -112,18 +157,113 @@ pub fn run(info: &GenerateReportCommandInfo, cfg: &ComparerConfig) -> Result<(),
   register_template("webpage", &mut handlebars)?;
 
   let report_data = create_report_data(info, cfg)?;
+  let report_node = structure_report_data(&report_data);
 
   // TODO
 
+  create_all_pages(&handlebars, &report_node)
+}
+
+fn create_all_pages(mut handlebars: &Handlebars, root: &ReportNode) -> Result<(), GenerateReportError> {
+  std::fs::create_dir("report").map_err(IoError)?;
+  let file = File::create("report/index.html").map_err(IoError)?;
+
+  // create the root page
+  let report = ReportOverview {
+    common: ReportCommonInfo {
+      appname: String::from("starsource-comparer"),
+      date: Utc::now().to_string(),
+      orig_filename: String::from("Starcraft.exe"),
+      orig_version: String::from("1.17.0")
+    },
+    viewpath: String::new(),
+    functions_matching: 0,
+    functions_total: 0,
+    functions_level: String::new(),
+    functions_percent: 0f32,
+    order_matching: 0,
+    order_total: 0,
+    order_level: String::new(),
+    order_percent: 0f32,
+    
+    page_content_partial: String::from("index_partial"),
+    index_items: Vec::new(),
+    diff_html: String::new()
+  };
+
+  handlebars.render_to_write("webpage", &report, file).map_err(RenderError)?;
+
+  create_pages(&handlebars, root)
+}
+
+fn get_pathname(path: &String) -> String {
+  "report/".to_string() + &path.chars()
+  .map(|c| if "<>:\"/\\|?*".find(c).is_some() { '_' } else { c })
+  .collect::<String>() + ".html"
+}
+
+fn create_pages(mut handlebars: &Handlebars, node: &ReportNode) -> Result<(), GenerateReportError> {
+  match node {
+    ReportNode::Function(function) => {
+      let file = File::create(get_pathname(&function.fn_name)).map_err(IoError)?;
+
+      // create function comparison page
+      let report = ReportOverview {
+        common: ReportCommonInfo {
+          appname: String::from("starsource-comparer"),
+          date: Utc::now().to_string(),
+          orig_filename: String::from("Starcraft.exe"),
+          orig_version: String::from("1.17.0")
+        },
+        viewpath: function.file.to_string_lossy().into_owned(),
+        functions_matching: function.compare_result.as_ref().map_or(0, |cmp| cmp.match_ratio as i32),
+        functions_total: 1,
+        functions_level: String::new(),
+        functions_percent: function.compare_result.as_ref().map_or(0f32, |cmp| cmp.match_ratio * 100.0),
+        order_matching: 0,
+        order_total: 0,
+        order_level: String::new(),
+        order_percent: 0.0,
+        
+        page_content_partial: String::from("compare_partial"),
+        index_items: Vec::new(),
+        diff_html: function.compare_result.as_ref().map_or(String::new(), |cmp| cmp.diff_html.clone())
+      };
+    
+      handlebars.render_to_write("webpage", &report, file).map_err(RenderError)?;
+    },
+    ReportNode::Path(branch) => {
+      for node in branch.nodes.iter() {
+        create_pages(handlebars, node)?;
+      }
+    },
+  }
+  
   Ok(())
 }
 
-fn structure_report_data(fns: &Vec<DualFunctionReport>) {
+fn get_path_grouping(f: &DualFunctionReport, prefix: &PathBuf) -> PathBuf {
+  f.file.strip_prefix(prefix).unwrap_or(f.file.as_path()).to_path_buf()
+}
+
+fn structure_report_data(fns: &Vec<DualFunctionReport>) -> ReportNode {
   let common_path = common_path_all(fns.iter().map(|f|Path::new(&f.file))).unwrap_or_default();
 
+  //let n = fns.into_iter().into_grouping_map_by(|f|get_path_grouping(f, &common_path)).collect::<Vec<_>>();
+
   // TODO think about implementation
-  // 1. group by path, removing the common path
-  // 2. convert to ReportNode for tree structure, iterating the Path pieces (recursive calls?)
+  // 1. group by path
+  // 2. remove common path
+  // 3. convert to ReportNode for tree structure, iterating the Path pieces (recursive calls?)
+
+  // this is just temporary
+  ReportNode::Path(PathReport {
+    path: String::from("root"),
+    match_ratio: fns.iter().map(|f|f.compare_result.as_ref().map_or(0f32, |cmp|cmp.match_ratio)).sum::<f32>() / fns.len() as f32,
+    nodes: fns.into_iter().map(|f|ReportNode::Function(f.clone())).collect_vec(),
+    total_fns: fns.len() as i32,
+    num_matching_fns: fns.iter().map(|f|f.compare_result.as_ref().map_or(0, |cmp|cmp.match_ratio as i32)).sum()
+  })
 }
 
 fn get_orig_funcs(cfg: &ComparerConfig) -> HashMap<String, FunctionDefinition> {
@@ -164,8 +304,8 @@ fn create_report_data(info: &GenerateReportCommandInfo, cfg: &ComparerConfig) ->
     .ok();
 
     DualFunctionReport {
-      name: fn_name.clone(),
-      file: pdb_fn.map_or(String::from(""), |f| f.file.clone()),
+      fn_name: fn_name.clone(),
+      file: pdb_fn.map_or(PathBuf::new(), |f| PathBuf::from(&f.file)),
       new_addr: pdb_fn.map(|f| f.offset),
       new_size: pdb_fn.map(|f| f.size),
       orig_addr: orig_fn.map(|f| f.addr),

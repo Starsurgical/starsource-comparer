@@ -5,6 +5,7 @@ authors = ["Dennis Duda <git@seri.tools>", "Adam Heinermann"]
 edition = '2021'
 
 [dependencies]
+chrono = "0.4.38"
 clap = { version = "4", features = ["derive"] }
 common-path = "1.0.0"
 handlebars = "5.1.2"

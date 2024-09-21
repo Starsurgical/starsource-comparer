@@ -10,13 +10,13 @@
         <td width="10%"></td>
       </tr>
       <tr>
-        <td class="tableHead">Filename</td>
+        <td class="tableHead">Item</td>
         <td class="tableHead" colspan="1">Order</td>
         <td class="tableHead" colspan="3">Equivalence</td>
       </tr>
       {{#each index_items}}
         <tr>
-          <td class="coverFile"><a href="{{ this.htmlpath }}">{{ this.filename }}</a></td>
+          <td class="coverFile"><a href="{{ this.htmlpath }}">{{ this.itemname }}</a></td>
           <td>{{ this.order_arrow }} {{ this.order_numdiff }}</td>
           <td class="coverBar" align="center">
             <table border="0" cellspacing="0" cellpadding="1">
