@@ -124,12 +124,12 @@ struct GenerateFullArgs {
 
 #[derive(Args)]
 struct GenerateReportArgs {
-    /// Path to the original Starcraft.exe to use
-    starcraft_file: String,
+  /// Path to the original Starcraft.exe to use
+  starcraft_file: String,
 
-    /// Sets the debug binary file to use.
-    /// The respective .pdb file needs to exist in the same folder as well.
-    starsource_file: String,
+  /// Sets the debug binary file to use.
+  /// The respective .pdb file needs to exist in the same folder as well.
+  starsource_file: String,
 }
 
 #[derive(Subcommand)]

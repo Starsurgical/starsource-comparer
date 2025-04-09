@@ -9,12 +9,12 @@
         <tr>
           <td class="title">{{ common.appname }} - binary match report</td>
           <td class="ruler"></td>
-          <td width="100%">{{>cov_overview}}</td>
+          <td width="100%">{{> cov_overview }}</td>
           <td class="ruler"></td>
         </tr>
       </tbody>
     </table>
-    {{> (lookup . 'page_content_partial')}}
+    {{> (lookup this "page_content_partial") }}
     <br>
     <table width="100%" border="0" cellspacing="0" cellpadding="0">
       <tbody>

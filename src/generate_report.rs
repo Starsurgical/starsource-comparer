@@ -143,7 +143,9 @@ struct PdbData {
 }
 
 fn register_template(name: &str, handlebars: &mut Handlebars) -> Result<(), GenerateReportError> {
-  handlebars.register_template_string(name, load_asset_text_file(format!("{name}.hbs"))).map_err(TemplateError)?;
+  handlebars
+    .register_template_string(name, load_asset_text_file(format!("{name}.hbs")))
+    .map_err(TemplateError)?;
   Ok(())
 }
 
@@ -164,8 +166,8 @@ pub fn run(info: &GenerateReportCommandInfo, cfg: &ComparerConfig) -> Result<(),
   create_all_pages(&handlebars, &report_node)
 }
 
-fn create_all_pages(mut handlebars: &Handlebars, root: &ReportNode) -> Result<(), GenerateReportError> {
-  std::fs::create_dir("report").map_err(IoError)?;
+fn create_all_pages(handlebars: &Handlebars, root: &ReportNode) -> Result<(), GenerateReportError> {
+  std::fs::create_dir("report").ok();
   let file = File::create("report/index.html").map_err(IoError)?;
 
   // create the root page
@@ -174,7 +176,7 @@ fn create_all_pages(mut handlebars: &Handlebars, root: &ReportNode) -> Result<()
       appname: String::from("starsource-comparer"),
       date: Utc::now().to_string(),
       orig_filename: String::from("Starcraft.exe"),
-      orig_version: String::from("1.17.0")
+      orig_version: String::from("1.17.0"),
     },
     viewpath: String::new(),
     functions_matching: 0,
@@ -185,24 +187,29 @@ fn create_all_pages(mut handlebars: &Handlebars, root: &ReportNode) -> Result<()
     order_total: 0,
     order_level: String::new(),
     order_percent: 0f32,
-    
+
     page_content_partial: String::from("index_partial"),
     index_items: Vec::new(),
-    diff_html: String::new()
+    diff_html: String::new(),
   };
 
-  handlebars.render_to_write("webpage", &report, file).map_err(RenderError)?;
+  handlebars
+    .render_to_write("webpage", &report, file)
+    .map_err(RenderError)?;
 
-  create_pages(&handlebars, root)
+  create_pages(handlebars, root)
 }
 
-fn get_pathname(path: &String) -> String {
-  "report/".to_string() + &path.chars()
-  .map(|c| if "<>:\"/\\|?*".find(c).is_some() { '_' } else { c })
-  .collect::<String>() + ".html"
+fn get_pathname(path: &str) -> String {
+  "report/".to_string()
+    + &path
+      .chars()
+      .map(|c| if "<>:\"/\\|?*".find(c).is_some() { '_' } else { c })
+      .collect::<String>()
+    + ".html"
 }
 
-fn create_pages(mut handlebars: &Handlebars, node: &ReportNode) -> Result<(), GenerateReportError> {
+fn create_pages(handlebars: &Handlebars, node: &ReportNode) -> Result<(), GenerateReportError> {
   match node {
     ReportNode::Function(function) => {
       let file = File::create(get_pathname(&function.fn_name)).map_err(IoError)?;
@@ -213,32 +220,40 @@ fn create_pages(mut handlebars: &Handlebars, node: &ReportNode) -> Result<(), Ge
           appname: String::from("starsource-comparer"),
           date: Utc::now().to_string(),
           orig_filename: String::from("Starcraft.exe"),
-          orig_version: String::from("1.17.0")
+          orig_version: String::from("1.17.0"),
         },
         viewpath: function.file.to_string_lossy().into_owned(),
         functions_matching: function.compare_result.as_ref().map_or(0, |cmp| cmp.match_ratio as i32),
         functions_total: 1,
         functions_level: String::new(),
-        functions_percent: function.compare_result.as_ref().map_or(0f32, |cmp| cmp.match_ratio * 100.0),
+        functions_percent: function
+          .compare_result
+          .as_ref()
+          .map_or(0f32, |cmp| cmp.match_ratio * 100.0),
         order_matching: 0,
         order_total: 0,
         order_level: String::new(),
         order_percent: 0.0,
-        
+
         page_content_partial: String::from("compare_partial"),
         index_items: Vec::new(),
-        diff_html: function.compare_result.as_ref().map_or(String::new(), |cmp| cmp.diff_html.clone())
+        diff_html: function
+          .compare_result
+          .as_ref()
+          .map_or(String::new(), |cmp| cmp.diff_html.clone()),
       };
-    
-      handlebars.render_to_write("webpage", &report, file).map_err(RenderError)?;
-    },
+
+      handlebars
+        .render_to_write("webpage", &report, file)
+        .map_err(RenderError)?;
+    }
     ReportNode::Path(branch) => {
       for node in branch.nodes.iter() {
         create_pages(handlebars, node)?;
       }
-    },
+    }
   }
-  
+
   Ok(())
 }
 
@@ -246,8 +261,8 @@ fn get_path_grouping(f: &DualFunctionReport, prefix: &PathBuf) -> PathBuf {
   f.file.strip_prefix(prefix).unwrap_or(f.file.as_path()).to_path_buf()
 }
 
-fn structure_report_data(fns: &Vec<DualFunctionReport>) -> ReportNode {
-  let common_path = common_path_all(fns.iter().map(|f|Path::new(&f.file))).unwrap_or_default();
+fn structure_report_data(fns: &[DualFunctionReport]) -> ReportNode {
+  //let common_path = common_path_all(fns.iter().map(|f| Path::new(&f.file))).unwrap_or_default();
 
   //let n = fns.into_iter().into_grouping_map_by(|f|get_path_grouping(f, &common_path)).collect::<Vec<_>>();
 
@@ -256,27 +271,38 @@ fn structure_report_data(fns: &Vec<DualFunctionReport>) -> ReportNode {
   // 2. remove common path
   // 3. convert to ReportNode for tree structure, iterating the Path pieces (recursive calls?)
 
+  
   // this is just temporary
   ReportNode::Path(PathReport {
     path: String::from("root"),
-    match_ratio: fns.iter().map(|f|f.compare_result.as_ref().map_or(0f32, |cmp|cmp.match_ratio)).sum::<f32>() / fns.len() as f32,
-    nodes: fns.into_iter().map(|f|ReportNode::Function(f.clone())).collect_vec(),
+    match_ratio: fns
+      .iter()
+      .map(|f| f.compare_result.as_ref().map_or(0f32, |cmp| cmp.match_ratio))
+      .sum::<f32>()
+      / fns.len() as f32,
+    nodes: fns.iter().map(|f| ReportNode::Function(f.clone())).collect_vec(),
     total_fns: fns.len() as i32,
-    num_matching_fns: fns.iter().map(|f|f.compare_result.as_ref().map_or(0, |cmp|cmp.match_ratio as i32)).sum()
+    num_matching_fns: fns
+      .iter()
+      .map(|f| f.compare_result.as_ref().map_or(0, |cmp| cmp.match_ratio as i32))
+      .sum(),
   })
 }
 
 fn get_orig_funcs(cfg: &ComparerConfig) -> HashMap<String, FunctionDefinition> {
-  cfg.func
-  .iter()
-  .map(|func| (func.name.clone(), func.clone()))
-  .collect()
+  cfg.func.iter().map(|func| (func.name.clone(), func.clone())).collect()
 }
 
-fn create_report_data(info: &GenerateReportCommandInfo, cfg: &ComparerConfig) -> Result<Vec<DualFunctionReport>, GenerateReportError> {
+fn create_report_data(
+  info: &GenerateReportCommandInfo,
+  cfg: &ComparerConfig,
+) -> Result<Vec<DualFunctionReport>, GenerateReportError> {
   let orig_functions = get_orig_funcs(cfg);
-  let orig_fn_map = orig_functions.values().map(|f| (f.addr, f.clone())).collect::<HashMap<_,_>>();
-  
+  let orig_fn_map = orig_functions
+    .values()
+    .map(|f| (f.addr, f.clone()))
+    .collect::<HashMap<_, _>>();
+
   let pdb_functions = get_pdb_funcs(&info.report_opts.compare_pdb_file).map_err(PdbError)?;
   let pdb_fn_map = get_pdb_fn_map(&pdb_functions);
 
@@ -293,26 +319,32 @@ fn create_report_data(info: &GenerateReportCommandInfo, cfg: &ComparerConfig) ->
     file: std::fs::read(&info.report_opts.compare_file_path).map_err(IoError)?,
   };
 
-  Ok(orig.functions.keys().chain(pdb.functions.keys())
-  .unique()
-  .map(|fn_name|{
-    let orig_fn = orig.functions.get(fn_name);
-    let pdb_fn = pdb.functions.get(fn_name);
+  Ok(
+    orig
+      .functions
+      .keys()
+      .chain(pdb.functions.keys())
+      .unique()
+      .map(|fn_name| {
+        let orig_fn = orig.functions.get(fn_name);
+        let pdb_fn = pdb.functions.get(fn_name);
 
-    let compare_result = create_comparison_data(fn_name, &orig, &pdb, &info)
-    .inspect_err(print_error)
-    .ok();
+        let compare_result = create_comparison_data(fn_name, &orig, &pdb, info)
+          .inspect_err(print_error)
+          .ok();
 
-    DualFunctionReport {
-      fn_name: fn_name.clone(),
-      file: pdb_fn.map_or(PathBuf::new(), |f| PathBuf::from(&f.file)),
-      new_addr: pdb_fn.map(|f| f.offset),
-      new_size: pdb_fn.map(|f| f.size),
-      orig_addr: orig_fn.map(|f| f.addr),
-      orig_size: orig_fn.map(|f| f.size).flatten(),
-      compare_result: compare_result,
-    }
-  }).collect())
+        DualFunctionReport {
+          fn_name: fn_name.clone(),
+          file: pdb_fn.map_or(PathBuf::new(), |f| PathBuf::from(&f.file)),
+          new_addr: pdb_fn.map(|f| f.offset),
+          new_size: pdb_fn.map(|f| f.size),
+          orig_addr: orig_fn.map(|f| f.addr),
+          orig_size: orig_fn.and_then(|f| f.size),
+          compare_result,
+        }
+      })
+      .collect(),
+  )
 }
 
 fn create_change_line_html(change: Change<&str>) -> String {
@@ -323,7 +355,12 @@ fn create_change_line_html(change: Change<&str>) -> String {
   }
 }
 
-fn create_comparison_data(fn_name: &String, orig: &OrigData, pdb: &PdbData, info: &GenerateReportCommandInfo) -> Result<CompareResult, GenerateReportError> {
+fn create_comparison_data(
+  fn_name: &String,
+  orig: &OrigData,
+  pdb: &PdbData,
+  info: &GenerateReportCommandInfo,
+) -> Result<CompareResult, GenerateReportError> {
   let orig_fn = orig.functions.get(fn_name);
   let pdb_fn = pdb.functions.get(fn_name);
 
@@ -331,16 +368,26 @@ fn create_comparison_data(fn_name: &String, orig: &OrigData, pdb: &PdbData, info
     Some(f) => {
       let offset = (f.addr - orig.base_address) as usize;
       let virt_addr = f.addr;
-      
-      let orig_fn_size = f.size
-      .or(pdb_fn.map(|f|f.size))
-      .ok_or(RequiredFunctionSizeNotFoundError(String::from("No function size provided")))?;
+
+      let orig_fn_size = f
+        .size
+        .or(pdb_fn.map(|f| f.size))
+        .ok_or(RequiredFunctionSizeNotFoundError(String::from(
+          "No function size provided",
+        )))?;
 
       let mut buf = Vec::new();
-      write_disasm(&mut buf, &orig.file[offset..offset+orig_fn_size], &info.disasm_opts, virt_addr, &orig.fn_map).map_err(DisasmError)?;
+      write_disasm(
+        &mut buf,
+        &orig.file[offset..offset + orig_fn_size],
+        &info.disasm_opts,
+        virt_addr,
+        &orig.fn_map,
+      )
+      .map_err(DisasmError)?;
       String::from_utf8(buf).map_err(FromUtf8Error)?
     }
-    None => String::from("")
+    None => String::from(""),
   };
 
   let pdb_fn_asm = match pdb_fn {
@@ -349,10 +396,17 @@ fn create_comparison_data(fn_name: &String, orig: &OrigData, pdb: &PdbData, info
       let virt_addr = f.offset + PDB_SEGMENT_OFFSET;
 
       let mut buf = Vec::new();
-      write_disasm(&mut buf, &pdb.file[offset..offset+f.size], &info.disasm_opts, virt_addr, &pdb.fn_map).map_err(DisasmError)?;
+      write_disasm(
+        &mut buf,
+        &pdb.file[offset..offset + f.size],
+        &info.disasm_opts,
+        virt_addr,
+        &pdb.fn_map,
+      )
+      .map_err(DisasmError)?;
       String::from_utf8(buf).map_err(FromUtf8Error)?
     }
-    None => String::from("")
+    None => String::from(""),
   };
 
   let patch = TextDiff::from_lines(&orig_fn_asm, &pdb_fn_asm);

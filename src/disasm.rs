@@ -65,6 +65,10 @@ pub fn write_disasm(
   };
 
   for insn_info in decoder.decode_all::<VisibleOperands>(bytes, offset) {
+    if insn_info.is_err() {
+      break;
+    }
+
     let (ip, _, insn) = insn_info.unwrap();
 
     disasm_extra.offset = ip; // BUG: Formatter is not propagating the instruction pointer
