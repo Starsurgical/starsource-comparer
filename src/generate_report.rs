@@ -201,18 +201,49 @@ fn create_all_pages(handlebars: &Handlebars, root: &ReportNode) -> Result<(), Ge
 }
 
 fn get_pathname(path: &str) -> String {
-  "report/".to_string()
-    + &path
-      .chars()
+  path.chars()
       .map(|c| if "<>:\"/\\|?*".find(c).is_some() { '_' } else { c })
       .collect::<String>()
     + ".html"
 }
 
+fn get_report_pathname(path: &str) -> String {
+  "report/".to_string() + get_pathname(path).as_str()
+}
+
+fn create_index_list_item(node: &ReportNode) -> ReportListItem {
+  match node {
+    ReportNode::Function(function) => {
+      ReportListItem {
+        htmlpath: get_pathname(&function.fn_name),
+        itemname: function.fn_name.clone(),
+        match_level: String::new(),
+        order_arrow: String::new(),
+        match_percent: function.compare_result.as_ref().map_or(0.0, |f|f.match_ratio * 100.0),
+        order_numdiff: 0,
+        matching: function.compare_result.as_ref().map_or(0, |f|f.match_ratio as i32),
+        total: 1
+      }
+    }
+    ReportNode::Path(branch) => {
+      ReportListItem {
+        htmlpath: get_pathname(&branch.path),
+        itemname: branch.path.clone(),
+        match_level: String::new(),
+        order_arrow: String::new(),
+        match_percent: branch.match_ratio,
+        order_numdiff: 0,
+        matching: branch.num_matching_fns,
+        total: branch.total_fns
+      }
+    }
+  }
+}
+
 fn create_pages(handlebars: &Handlebars, node: &ReportNode) -> Result<(), GenerateReportError> {
   match node {
     ReportNode::Function(function) => {
-      let file = File::create(get_pathname(&function.fn_name)).map_err(IoError)?;
+      let file = File::create(get_report_pathname(&function.fn_name)).map_err(IoError)?;
 
       // create function comparison page
       let report = ReportOverview {
@@ -251,6 +282,39 @@ fn create_pages(handlebars: &Handlebars, node: &ReportNode) -> Result<(), Genera
       for node in branch.nodes.iter() {
         create_pages(handlebars, node)?;
       }
+
+      let file = File::create(get_report_pathname(&branch.path)).map_err(IoError)?;
+      let items = branch.nodes.iter()
+        .map(create_index_list_item)
+        .sorted_by_key(|item|item.itemname.clone())
+        .collect_vec();
+
+      // create function comparison page
+      let report = ReportOverview {
+        common: ReportCommonInfo {
+          appname: String::from("starsource-comparer"),
+          date: Utc::now().to_string(),
+          orig_filename: String::from("Starcraft.exe"),
+          orig_version: String::from("1.17.0"),
+        },
+        viewpath: branch.path.clone(),
+        functions_matching: items.iter().map(|item|item.matching).sum(),
+        functions_total: items.iter().map(|item|item.total).sum(),
+        functions_level: String::new(),
+        functions_percent: items.iter().map(|item|item.match_percent).sum::<f32>() / items.len() as f32,
+        order_matching: 0,
+        order_total: 0,
+        order_level: String::new(),
+        order_percent: 0.0,
+
+        page_content_partial: String::from("index_partial"),
+        index_items: items,
+        diff_html: String::new(),
+      };
+
+      handlebars
+        .render_to_write("webpage", &report, file)
+        .map_err(RenderError)?;
     }
   }
 
