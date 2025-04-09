@@ -5,13 +5,18 @@ authors = ["Dennis Duda <git@seri.tools>", "Adam Heinermann"]
 edition = '2021'
 
 [dependencies]
+chrono = "0.4.38"
 clap = { version = "4", features = ["derive"] }
+common-path = "1.0.0"
+handlebars = "5.1.2"
 itertools = "0.13.0"
 notify = "6"
 num-traits = "0.2"
 pdb-addr2line = "0.11.0"
 regex = "1.10.4"
+rust-embed = { version = "8.4.0", features = ["debug-embed", "compression"] }
 serde = { version = "1", features = ["derive"] }
+similar = "2.5.0"
 thiserror = "1.0"
 toml = "0.8"
 zydis = "4.1.1"

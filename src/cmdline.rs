@@ -4,7 +4,9 @@ use std::{
   path::{Path, PathBuf},
 };
 
-use super::{Command, CompareCommandInfo, CompareOpts, DisasmOpts, GenerateFullCommandInfo};
+use crate::generate_report::GenerateReportOpts;
+
+use super::{Command, CompareCommandInfo, CompareOpts, DisasmOpts, GenerateFullCommandInfo, GenerateReportCommandInfo};
 
 /// Generates orig.asm and compare.asm in the current working directory.
 /// Finds the function specified in the starsource binary, disassembles it,
@@ -73,6 +75,21 @@ impl Cli {
       truncate_to_original: self.truncate_to_original,
     }
   }
+
+  fn parse_generate_report_args(&self, args: &GenerateReportArgs) -> GenerateReportCommandInfo {
+    let compare_file_path: PathBuf = PathBuf::from(&args.starsource_file);
+    let compare_pdb_file = compare_file_path.with_extension("pdb");
+
+    GenerateReportCommandInfo {
+      report_opts: GenerateReportOpts {
+        orig: PathBuf::from(&args.starcraft_file),
+        compare_file_path,
+        compare_pdb_file,
+      },
+      disasm_opts: self.parse_disasm_opts(),
+      truncate_to_original: self.truncate_to_original,
+    }
+  }
 }
 
 #[derive(Args)]
@@ -105,6 +122,16 @@ struct GenerateFullArgs {
   orig_file: bool,
 }
 
+#[derive(Args)]
+struct GenerateReportArgs {
+  /// Path to the original Starcraft.exe to use
+  starcraft_file: String,
+
+  /// Sets the debug binary file to use.
+  /// The respective .pdb file needs to exist in the same folder as well.
+  starsource_file: String,
+}
+
 #[derive(Subcommand)]
 enum Commands {
   /// Generates two disassembly files to compare a function between the original exe and new exe.
@@ -113,6 +140,9 @@ enum Commands {
   /// Generates a disassembly file with all functions defined in comparer-config.toml.
   #[command(arg_required_else_help = true)]
   GenerateFull(GenerateFullArgs),
+  /// Generates an HTML report showing the state of global equivalence with the original program.
+  #[command(arg_required_else_help = true)]
+  GenerateReport(GenerateReportArgs),
 }
 
 pub fn parse_cmdline() -> Command {
@@ -121,6 +151,7 @@ pub fn parse_cmdline() -> Command {
   match &cli.command {
     Commands::GenerateFull(args) => Command::GenerateFull(cli.parse_generate_full_args(args)),
     Commands::Compare(args) => Command::Compare(cli.parse_compare_args(args)),
+    Commands::GenerateReport(args) => Command::GenerateReport(cli.parse_generate_report_args(args)),
   }
 }
 

@@ -1,8 +1,10 @@
+mod assets;
 mod cmdline;
 mod compare;
 mod comparer_config;
 mod disasm;
 mod generate_full;
+mod generate_report;
 mod hexformat;
 mod pdb;
 
@@ -10,11 +12,13 @@ pub use self::compare::{CompareCommandInfo, CompareOpts};
 use self::comparer_config::ComparerConfig;
 pub use self::disasm::{DisasmError, DisasmOpts};
 pub use self::generate_full::GenerateFullCommandInfo;
+pub use self::generate_report::GenerateReportCommandInfo;
 pub use self::hexformat::CustomUpperHexFormat;
 
 pub enum Command {
   Compare(CompareCommandInfo),
   GenerateFull(GenerateFullCommandInfo),
+  GenerateReport(GenerateReportCommandInfo),
 }
 
 fn main() {
@@ -37,6 +41,12 @@ fn main() {
     Command::GenerateFull(info) => {
       if let Err(e) = generate_full::run(info, &comparer_config) {
         generate_full::print_error(&e);
+        std::process::exit(1);
+      }
+    }
+    Command::GenerateReport(info) => {
+      if let Err(e) = generate_report::run(&info, &comparer_config) {
+        generate_report::print_error(&e);
         std::process::exit(1);
       }
     }

@@ -58,39 +58,6 @@ pub fn write_disasm(
 
   let decoder = Decoder::new32();
 
-  /*
-  // TODO: We can't access other functions because bytes are only for our current function
-  let decoder = Decoder::new32();
-  for insn_info in decoder.decode_all::<VisibleOperands>(bytes, offset) {
-    let (ip, _, insn) = insn_info.unwrap();
-
-    match insn.mnemonic {
-      Mnemonic::JMP | Mnemonic::CALL if insn.raw.imm.len() > 0 => {
-        let target_addr = insn.calc_absolute_address(ip, &insn.operands()[0]).unwrap();
-        if fn_map.contains_key(&target_addr) {
-          continue;
-        }
-
-        println!("{target_addr:X}\n");
-
-        let target_addr_pos = target_addr as usize;
-        // TODO: This can't work because the bytes are ONLY for the function we are working in
-        //decoder.decode_first(???);
-
-        // TODO: finish
-        // 1. Decode the new target_addr instruction.
-        // 2. Check if it's a JMP.
-        // 3. Get its next target address.
-        // 4. Copy the new address's name mapping to the original target address.
-      }
-      _ => {}
-    }
-  }
-
-  let mut bigger_fn_map = fn_map.clone();
-  bigger_fn_map.extend(result);
-  */
-
   let mut disasm_extra = DisasmExtra {
     opts: disasm_opts.clone(),
     fn_map: fn_map.clone(),
@@ -98,6 +65,10 @@ pub fn write_disasm(
   };
 
   for insn_info in decoder.decode_all::<VisibleOperands>(bytes, offset) {
+    if insn_info.is_err() {
+      break;
+    }
+
     let (ip, _, insn) = insn_info.unwrap();
 
     disasm_extra.offset = ip; // BUG: Formatter is not propagating the instruction pointer

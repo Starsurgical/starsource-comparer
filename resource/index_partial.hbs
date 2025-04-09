@@ -1,0 +1,38 @@
+<br>
+<center>
+  <table width="80%" cellpadding="1" cellspacing="1" border="0">
+    <tbody>
+      <tr>
+        <td width="60%"><br></td>
+        <td width="10%"></td>
+        <td width="10%"></td>
+        <td width="10%"></td>
+        <td width="10%"></td>
+      </tr>
+      <tr>
+        <td class="tableHead">Item</td>
+        <td class="tableHead" colspan="1">Order</td>
+        <td class="tableHead" colspan="3">Equivalence</td>
+      </tr>
+      {{#each index_items}}
+        <tr>
+          <td class="coverFile"><a href="{{ this.htmlpath }}">{{ this.itemname }}</a></td>
+          <td>{{ this.order_arrow }} {{ this.order_numdiff }}</td>
+          <td class="coverBar" align="center">
+            <table border="0" cellspacing="0" cellpadding="1">
+              <tbody>
+                <tr>
+                  <td class="coverBarOutline">
+                    TODO
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </td>
+          <td class="coverPer{{ this.match_level }}">{{ this.match_percent }} %</td>
+          <td class="coverNum{{ this.match_level }}">{{#if this.total}}{{ this.matching }} / {{ this.total }}{{/if}}</td>
+        </tr>
+      {{/each}}
+    </tbody>
+  </table>
+</center>
