@@ -1,5 +1,6 @@
 use itertools::Itertools;
 use pdb_addr2line::pdb;
+use pdb::FallibleIterator;
 use regex::Regex;
 use std::collections::HashMap;
 use std::fs::File;
@@ -78,9 +79,10 @@ fn demangle_function_name(name: String) -> String {
 
 pub fn get_pdb_funcs(file: impl AsRef<Path>) -> Result<HashMap<String, FunctionSymbol>, PdbError> {
   let file = File::open(file)?;
-  let pdb = pdb::PDB::open(file)?;
+  let mut pdb = pdb::PDB::open(file)?;
 
-  let context_data = pdb_addr2line::ContextPdbData::try_from_pdb(pdb)?;
+  let address_map = pdb.address_map()?;
+  let context_data = pdb_addr2line::ContextPdbData::try_from_pdb_ref(&mut pdb)?;
   let context = context_data.make_context()?;
 
   let mut ret = HashMap::new();
@@ -88,6 +90,25 @@ pub fn get_pdb_funcs(file: impl AsRef<Path>) -> Result<HashMap<String, FunctionS
     let fun = to_function_symbol(&context, function)?;
     let name = demangle_function_name(fun.name.clone());
     ret.insert(name, fun);
+  }
+
+  let symbol_table = pdb.global_symbols()?;
+  let mut symbols = symbol_table.iter();
+  while let Some(symbol) = symbols.next()? {
+      if let Ok(pdb::SymbolData::Public(data)) = symbol.parse() {
+        let name: String = data.name.to_string().into();
+        if name.starts_with("__imp_") {
+          let address = data.offset.to_rva(&address_map).unwrap_or_default().0 as u64;
+          let offset = address - 0xC00;
+
+          ret.insert(name.clone(), FunctionSymbol {
+              name: name,
+              offset: offset,
+              size: 0,
+              file: String::new(),
+          });
+        }
+      }
   }
 
   Ok(ret)

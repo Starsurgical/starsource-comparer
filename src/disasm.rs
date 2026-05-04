@@ -116,7 +116,9 @@ fn format_addrs(
           if insn.opcode == 0xFF && [2, 3].contains(&insn.raw.modrm.reg) {
             buf.append_str("<indir_fn>")? // hide function call addresses, 0xFF /3 = CALL m16:32)
           } else {
-            buf.append_str(&format!("{:#X}", mem.disp.displacement))?
+            let target_addr = mem.disp.displacement as u64;
+            let func = opts.fn_map.get(&target_addr);
+            buf.append_str(&func.map_or_else(|| format!("{:#X}", target_addr), cleanup_name))?
           }
         } else {
           buf.append_str("<indir_addr>")?
