@@ -21,6 +21,9 @@ pub enum PdbError {
 
   #[error("failed to parse PDB data")]
   Pdb(#[from] pdb_addr2line::pdb::Error),
+
+  #[error("regex error")]
+  Regex(#[from] regex::Error),
 }
 
 #[derive(Clone, Debug)]
@@ -94,12 +97,14 @@ pub fn get_pdb_funcs(file: impl AsRef<Path>) -> Result<HashMap<String, FunctionS
 
   let symbol_table = pdb.global_symbols()?;
   let mut symbols = symbol_table.iter();
+  let re = regex::Regex::new(r"__imp__?@?\??([^@]+)@?.*")?;
   while let Some(symbol) = symbols.next()? {
     if let Ok(pdb::SymbolData::Public(data)) = symbol.parse() {
-      let name: String = data.name.to_string().into();
-      if name.starts_with("__imp_") {
+      let raw_name: String = data.name.to_string().into();
+      if raw_name.starts_with("__imp_") {
         let address = data.offset.to_rva(&address_map).unwrap_or_default().0 as u64;
         let offset = address - 0xC00;
+        let name = re.replace(&raw_name, "$1").to_string();
 
         ret.insert(
           name.clone(),
