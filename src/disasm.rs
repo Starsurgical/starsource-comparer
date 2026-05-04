@@ -3,7 +3,7 @@ use std::fmt::Debug;
 use std::io::{Error as IoError, Write};
 
 use thiserror::Error;
-use zydis::ffi::{DecodedOperandKind, FormatterBuffer, FormatterContext};
+use zydis::ffi::{DecodedOperandKind, FormatterBuffer, FormatterContext, ImmediateInfo};
 use zydis::{Decoder, Formatter, FormatterStyle, OutputBuffer, Result as ZydisResult, Status, VisibleOperands};
 
 use super::comparer_config::FunctionDefinition;
@@ -84,8 +84,19 @@ pub fn write_disasm(
   Ok(())
 }
 
-fn cleanup_name(name: &str) -> &str {
-  name.split('(').next().unwrap_or(name)
+fn cleanup_name(func: &FunctionDefinition) -> String {
+  func.name.split('(').next().unwrap_or(&func.name).to_string()
+}
+
+fn process_address(target_addr: u64, imm: &ImmediateInfo) -> String {
+  let prefix = if imm.is_relative { "$" } else { "" };
+
+  if imm.is_signed {
+    let hexformat = CustomUpperHexFormat(imm.value as i64);
+    format!("{prefix}{hexformat:+#X}")
+  } else {
+    format!("{:+#X}", imm.value)
+  }
 }
 
 fn format_addrs(
@@ -111,31 +122,11 @@ fn format_addrs(
           buf.append_str("<indir_addr>")?
         }
       }
-      DecodedOperandKind::Imm(imm) => match insn.opcode {
-        0xE8 => {
-          let target_addr = insn.calc_absolute_address(opts.offset, op)?;
-          //let target_addr = (opts.offset + ctx.runtime_address).wrapping_add(imm.value) + u64::from(insn.length);
-          let func = opts.fn_map.get(&target_addr);
-          // TODO Problem with calls to anonymous `jmp <addr>` which calls the actual function
-
-          buf.append_str(func.map_or(format!("{:#X}", target_addr).as_str(), |func| {
-            cleanup_name(func.name.as_str())
-          }))?
-        }
-        _ => {
-          if imm.is_relative {
-            buf.append_str("$")?;
-          } else {
-            buf.append_str("<imm_addr>")?;
-            return Ok(());
-          }
-          if imm.is_signed {
-            buf.append_str(&format!("{:+#X}", CustomUpperHexFormat(imm.value as i64)))?;
-          } else {
-            buf.append_str(&format!("{:+#X}", imm.value))?;
-          }
-        }
-      },
+      DecodedOperandKind::Imm(imm) => {
+        let target_addr = insn.calc_absolute_address(opts.offset, op)?;
+        let func = opts.fn_map.get(&target_addr);
+        buf.append_str(&func.map_or_else(|| process_address(target_addr, imm), cleanup_name))?
+      }
       _ => {}
     }
   }
