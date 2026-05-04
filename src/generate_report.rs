@@ -1,9 +1,7 @@
 use std::fs::File;
-use std::path::Path;
 use std::{collections::HashMap, path::PathBuf};
 
 use chrono::Utc;
-use common_path::common_path_all;
 use handlebars::Handlebars;
 use itertools::Itertools;
 use serde::Serialize;
@@ -201,9 +199,10 @@ fn create_all_pages(handlebars: &Handlebars, root: &ReportNode) -> Result<(), Ge
 }
 
 fn get_pathname(path: &str) -> String {
-  path.chars()
-      .map(|c| if "<>:\"/\\|?*".find(c).is_some() { '_' } else { c })
-      .collect::<String>()
+  path
+    .chars()
+    .map(|c| if "<>:\"/\\|?*".find(c).is_some() { '_' } else { c })
+    .collect::<String>()
     + ".html"
 }
 
@@ -213,30 +212,26 @@ fn get_report_pathname(path: &str) -> String {
 
 fn create_index_list_item(node: &ReportNode) -> ReportListItem {
   match node {
-    ReportNode::Function(function) => {
-      ReportListItem {
-        htmlpath: get_pathname(&function.fn_name),
-        itemname: function.fn_name.clone(),
-        match_level: String::new(),
-        order_arrow: String::new(),
-        match_percent: function.compare_result.as_ref().map_or(0.0, |f|f.match_ratio * 100.0),
-        order_numdiff: 0,
-        matching: function.compare_result.as_ref().map_or(0, |f|f.match_ratio as i32),
-        total: 1
-      }
-    }
-    ReportNode::Path(branch) => {
-      ReportListItem {
-        htmlpath: get_pathname(&branch.path),
-        itemname: branch.path.clone(),
-        match_level: String::new(),
-        order_arrow: String::new(),
-        match_percent: branch.match_ratio,
-        order_numdiff: 0,
-        matching: branch.num_matching_fns,
-        total: branch.total_fns
-      }
-    }
+    ReportNode::Function(function) => ReportListItem {
+      htmlpath: get_pathname(&function.fn_name),
+      itemname: function.fn_name.clone(),
+      match_level: String::new(),
+      order_arrow: String::new(),
+      match_percent: function.compare_result.as_ref().map_or(0.0, |f| f.match_ratio * 100.0),
+      order_numdiff: 0,
+      matching: function.compare_result.as_ref().map_or(0, |f| f.match_ratio as i32),
+      total: 1,
+    },
+    ReportNode::Path(branch) => ReportListItem {
+      htmlpath: get_pathname(&branch.path),
+      itemname: branch.path.clone(),
+      match_level: String::new(),
+      order_arrow: String::new(),
+      match_percent: branch.match_ratio,
+      order_numdiff: 0,
+      matching: branch.num_matching_fns,
+      total: branch.total_fns,
+    },
   }
 }
 
@@ -284,9 +279,11 @@ fn create_pages(handlebars: &Handlebars, node: &ReportNode) -> Result<(), Genera
       }
 
       let file = File::create(get_report_pathname(&branch.path)).map_err(IoError)?;
-      let items = branch.nodes.iter()
+      let items = branch
+        .nodes
+        .iter()
         .map(create_index_list_item)
-        .sorted_by_key(|item|item.itemname.clone())
+        .sorted_by_key(|item| item.itemname.clone())
         .collect_vec();
 
       // create function comparison page
@@ -298,10 +295,10 @@ fn create_pages(handlebars: &Handlebars, node: &ReportNode) -> Result<(), Genera
           orig_version: String::from("1.17.0"),
         },
         viewpath: branch.path.clone(),
-        functions_matching: items.iter().map(|item|item.matching).sum(),
-        functions_total: items.iter().map(|item|item.total).sum(),
+        functions_matching: items.iter().map(|item| item.matching).sum(),
+        functions_total: items.iter().map(|item| item.total).sum(),
         functions_level: String::new(),
-        functions_percent: items.iter().map(|item|item.match_percent).sum::<f32>() / items.len() as f32,
+        functions_percent: items.iter().map(|item| item.match_percent).sum::<f32>() / items.len() as f32,
         order_matching: 0,
         order_total: 0,
         order_level: String::new(),
@@ -321,9 +318,9 @@ fn create_pages(handlebars: &Handlebars, node: &ReportNode) -> Result<(), Genera
   Ok(())
 }
 
-fn get_path_grouping(f: &DualFunctionReport, prefix: &PathBuf) -> PathBuf {
-  f.file.strip_prefix(prefix).unwrap_or(f.file.as_path()).to_path_buf()
-}
+//fn get_path_grouping(f: &DualFunctionReport, prefix: &PathBuf) -> PathBuf {
+//  f.file.strip_prefix(prefix).unwrap_or(f.file.as_path()).to_path_buf()
+//}
 
 fn structure_report_data(fns: &[DualFunctionReport]) -> ReportNode {
   //let common_path = common_path_all(fns.iter().map(|f| Path::new(&f.file))).unwrap_or_default();
@@ -335,7 +332,6 @@ fn structure_report_data(fns: &[DualFunctionReport]) -> ReportNode {
   // 2. remove common path
   // 3. convert to ReportNode for tree structure, iterating the Path pieces (recursive calls?)
 
-  
   // this is just temporary
   ReportNode::Path(PathReport {
     path: String::from("root"),
