@@ -8,6 +8,8 @@ use std::time::Duration;
 use notify::{Config, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use thiserror::Error;
 
+use goblin::pe::PE;
+
 use self::CompareError::*;
 use super::CustomUpperHexFormat;
 use super::comparer_config::*;
@@ -56,16 +58,38 @@ pub enum CompareError {
          but truncate_to_original was specified"
   )]
   RequiredFunctionSizeNotFound(String),
+
+  #[error("PE reading failed: {0}")]
+  PE(#[from] goblin::error::Error),
+}
+
+fn get_pe_import_fns(path: &PathBuf) -> Result<Vec<FunctionDefinition>, CompareError> {
+  let bytes = std::fs::read(path)?;
+  let pe = PE::parse(&bytes)?;
+  let base = pe.image_base as u64;
+
+  Ok(
+    pe.imports
+      .iter()
+      .map(|import| FunctionDefinition {
+        name: import.name.to_string(),
+        addr: base + import.offset as u64,
+        size: Some(4),
+      })
+      .collect(),
+  )
 }
 
 pub fn run(mut info: CompareCommandInfo, cfg: &ComparerConfig) -> Result<(), CompareError> {
-  let orig_fn_map = cfg
-    .func
+  let importmap = get_pe_import_fns(&info.compare_opts.orig)?;
+  let mut orig_fns = cfg.func.clone();
+  orig_fns.extend(importmap);
+
+  let orig_fn_map = orig_fns
     .iter()
     .map(|func| (func.addr, func.clone()))
     .collect::<HashMap<_, _>>();
-  let orig_fn = cfg
-    .func
+  let orig_fn = orig_fns
     .iter()
     .find(|s| s.name == info.compare_opts.debug_symbol)
     .ok_or(ConfigSymbolNotFound)?;

@@ -1,6 +1,6 @@
 use itertools::Itertools;
-use pdb_addr2line::pdb;
 use pdb::FallibleIterator;
+use pdb_addr2line::pdb;
 use regex::Regex;
 use std::collections::HashMap;
 use std::fs::File;
@@ -95,20 +95,23 @@ pub fn get_pdb_funcs(file: impl AsRef<Path>) -> Result<HashMap<String, FunctionS
   let symbol_table = pdb.global_symbols()?;
   let mut symbols = symbol_table.iter();
   while let Some(symbol) = symbols.next()? {
-      if let Ok(pdb::SymbolData::Public(data)) = symbol.parse() {
-        let name: String = data.name.to_string().into();
-        if name.starts_with("__imp_") {
-          let address = data.offset.to_rva(&address_map).unwrap_or_default().0 as u64;
-          let offset = address - 0xC00;
+    if let Ok(pdb::SymbolData::Public(data)) = symbol.parse() {
+      let name: String = data.name.to_string().into();
+      if name.starts_with("__imp_") {
+        let address = data.offset.to_rva(&address_map).unwrap_or_default().0 as u64;
+        let offset = address - 0xC00;
 
-          ret.insert(name.clone(), FunctionSymbol {
-              name: name,
-              offset: offset,
-              size: 0,
-              file: String::new(),
-          });
-        }
+        ret.insert(
+          name.clone(),
+          FunctionSymbol {
+            name,
+            offset,
+            size: 0,
+            file: String::new(),
+          },
+        );
       }
+    }
   }
 
   Ok(ret)
