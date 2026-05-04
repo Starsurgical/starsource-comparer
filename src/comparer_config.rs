@@ -1,6 +1,7 @@
 use std::path::Path;
 
 use serde::Deserialize;
+use thiserror::Error;
 
 const COMPARER_CONFIG_FILE: &str = "comparer-config.toml";
 
@@ -17,24 +18,24 @@ pub struct FunctionDefinition {
   pub size: Option<usize>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum ComparerConfigError {
-  #[allow(dead_code)]
-  IoError(std::io::Error),
+  #[error("Failed to read config file: {0}")]
+  Io(#[from] std::io::Error),
 
-  #[allow(dead_code)]
-  ParseError(toml::de::Error),
+  #[error("Failed to parse config file: {0}")]
+  Parse(#[from] toml::de::Error),
 }
 
 impl ComparerConfig {
   fn read_from_file(path: impl AsRef<Path>) -> Result<Self, ComparerConfigError> {
-    toml::from_str::<Self>(&std::fs::read_to_string(path).map_err(ComparerConfigError::IoError)?)
-      .map_err(ComparerConfigError::ParseError)
+    let raw = std::fs::read_to_string(path)?;
+    let config = toml::from_str(&raw)?;
+    Ok(config)
   }
 
   pub fn read_default() -> Result<Self, ComparerConfigError> {
-    let mut path = std::env::current_exe().map_err(ComparerConfigError::IoError)?;
-    path.set_file_name(COMPARER_CONFIG_FILE);
+    let path = std::env::current_exe()?.with_file_name(COMPARER_CONFIG_FILE);
     Self::read_from_file(path)
   }
 }

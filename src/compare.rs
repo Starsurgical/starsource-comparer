@@ -6,6 +6,7 @@ use std::sync::mpsc::channel;
 use std::time::Duration;
 
 use notify::{Config, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
+use thiserror::Error;
 
 use self::CompareError::*;
 use super::CustomUpperHexFormat;
@@ -30,30 +31,31 @@ pub struct CompareOpts {
   pub debug_symbol: String,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum CompareError {
-  PdbError(super::pdb::PdbError),
-  ConfigSymbolNotFound,
-  SymbolNotFound,
-  IoError(std::io::Error),
-  DisasmError(super::disasm::DisasmError),
-  NotifyError(notify::Error),
-  RequiredFunctionSizeNotFoundError(String),
-}
+  #[error("PDB file error: {0:#?}")]
+  Pdb(#[from] super::pdb::PdbError),
 
-pub fn print_error(e: &CompareError) {
-  match e {
-    PdbError(e) => println!("PDB file error: {:#?}", e),
-    ConfigSymbolNotFound => println!("Could not find the specified symbol in the config."),
-    SymbolNotFound => println!("Could not find the symbol in the PDB, skipping the file."),
-    IoError(e) => println!("IO error: {:#?}", e),
-    DisasmError(e) => println!("Zydis disassembly engine error: {:#?}", e),
-    NotifyError(e) => println!("Watcher error: {:#?}", e),
-    RequiredFunctionSizeNotFoundError(e) => println!(
-      "No size defined for the original function '{}', but truncate_to_original was specified.",
-      e
-    ),
-  }
+  #[error("Could not find the specified symbol in the config")]
+  ConfigSymbolNotFound,
+
+  #[error("Could not find the symbol in the PDB, skipping the file")]
+  SymbolNotFound,
+
+  #[error("IO error: {0}")]
+  Io(#[from] std::io::Error),
+
+  #[error("Zydis disassembly error: {0:#?}")]
+  Disasm(#[from] super::disasm::DisasmError),
+
+  #[error("Watcher error: {0}")]
+  Notify(#[from] notify::Error),
+
+  #[error(
+    "No size defined for the original function '{0}', \
+         but truncate_to_original was specified"
+  )]
+  RequiredFunctionSizeNotFound(String),
 }
 
 pub fn run(mut info: CompareCommandInfo, cfg: &ComparerConfig) -> Result<(), CompareError> {
@@ -70,7 +72,7 @@ pub fn run(mut info: CompareCommandInfo, cfg: &ComparerConfig) -> Result<(), Com
 
   if orig_fn.size.is_none() {
     if info.truncate_to_original {
-      return Err(RequiredFunctionSizeNotFoundError(orig_fn.name.clone()));
+      return Err(RequiredFunctionSizeNotFound(orig_fn.name.clone()));
     } else {
       println!("WARN: No size defined for the original function, using the PDB function size instead.");
     }
@@ -85,12 +87,9 @@ pub fn run(mut info: CompareCommandInfo, cfg: &ComparerConfig) -> Result<(), Com
 
   let (tx, rx) = channel();
 
-  let mut watcher: RecommendedWatcher =
-    Watcher::new(tx, Config::default().with_poll_interval(Duration::from_secs(2))).map_err(NotifyError)?;
+  let mut watcher: RecommendedWatcher = Watcher::new(tx, Config::default().with_poll_interval(Duration::from_secs(2)))?;
 
-  watcher
-    .watch(&info.compare_opts.compare_pdb_file, RecursiveMode::NonRecursive)
-    .map_err(NotifyError)?;
+  watcher.watch(&info.compare_opts.compare_pdb_file, RecursiveMode::NonRecursive)?;
 
   println!(
     "Started watching {} for changes. CTRL+C to quit.",
@@ -102,7 +101,7 @@ pub fn run(mut info: CompareCommandInfo, cfg: &ComparerConfig) -> Result<(), Com
       Ok(Ok(evt)) => match evt.kind {
         EventKind::Create(_) | EventKind::Modify(_) => {
           if let Err(e) = run_disassemble(&mut info, cfg.address_offset, orig_fn, &orig_fn_map) {
-            print_error(&e);
+            eprintln!("{e}");
           }
         }
         _ => {}
@@ -125,35 +124,35 @@ fn run_disassemble(
   orig_fn: &FunctionDefinition,
   orig_fn_map: &HashMap<u64, FunctionDefinition>,
 ) -> Result<(), CompareError> {
-  match write_compare(info, orig_addr_offset, orig_fn, orig_fn_map) {
-    Ok(FunctionSymbol { file, offset, size, .. }) => {
-      if let Some((old_addr, old_size)) = info.last_offset_size {
-        print!(
-          "Found {} in {} at {:#X} ({:+#X}), size: {:#X} ({:+#X})",
-          &info.compare_opts.debug_symbol,
-          file,
-          offset,
-          CustomUpperHexFormat((offset as i64) - (old_addr as i64)),
-          size,
-          CustomUpperHexFormat((size as i64) - (old_size as i64)),
-        );
-      } else {
-        print!(
-          "Found {} in {} at {:#X}, size: {:#X}",
-          &info.compare_opts.debug_symbol, file, offset, size,
-        );
-      }
+  let FunctionSymbol { file, offset, size, .. } = write_compare(info, orig_addr_offset, orig_fn, orig_fn_map)?;
 
-      if let Some(orig_size) = orig_fn.size {
-        print!("; orig size: {:#X}", orig_size);
-      }
-      println!();
-
-      info.last_offset_size = Some((offset, size));
-      Ok(())
+  match info.last_offset_size {
+    Some((old_addr, old_size)) => {
+      print!(
+        "Found {} in {} at {:#X} ({:+#X}), size: {:#X} ({:+#X})",
+        &info.compare_opts.debug_symbol,
+        file,
+        offset,
+        CustomUpperHexFormat((offset as i64) - (old_addr as i64)),
+        size,
+        CustomUpperHexFormat((size as i64) - (old_size as i64)),
+      );
     }
-    Err(e) => Err(e),
+    _ => {
+      print!(
+        "Found {} in {} at {:#X}, size: {:#X}",
+        &info.compare_opts.debug_symbol, file, offset, size,
+      )
+    }
   }
+
+  if let Some(orig_size) = orig_fn.size {
+    print!("; orig size: {:#X}", orig_size);
+  }
+  println!();
+
+  info.last_offset_size = Some((offset, size));
+  Ok(())
 }
 
 fn write_compare(
@@ -162,7 +161,7 @@ fn write_compare(
   orig_fn: &FunctionDefinition,
   orig_fn_map: &HashMap<u64, FunctionDefinition>,
 ) -> Result<FunctionSymbol, CompareError> {
-  let pdb_funcs = get_pdb_funcs(&info.compare_opts.compare_pdb_file).map_err(PdbError)?;
+  let pdb_funcs = get_pdb_funcs(&info.compare_opts.compare_pdb_file)?;
   let fn_sym = pdb_funcs.get(&info.compare_opts.debug_symbol).ok_or(SymbolNotFound)?;
   let pdb_fn_map = get_pdb_fn_map(&pdb_funcs);
 
@@ -204,7 +203,7 @@ pub fn get_pdb_fn_map(pdb_funcs: &HashMap<String, FunctionSymbol>) -> HashMap<u6
   pdb_funcs
     .values()
     .map(|func| func.as_function_definition_pair())
-    .collect::<HashMap<_, _>>()
+    .collect()
 }
 
 fn write_disassembly(
@@ -214,24 +213,15 @@ fn write_disassembly(
   addr: u64,
   fn_map: &HashMap<u64, FunctionDefinition>,
 ) -> Result<(), CompareError> {
-  let mut path = std::env::current_dir().map_err(IoError)?;
-  path.push(filename);
-
-  File::create(path)
-    .map(BufWriter::new)
-    .map_err(IoError)
-    .and_then(|mut buf_writer| {
-      write_disasm(&mut buf_writer, function_bytes, &info.disasm_opts, addr, fn_map).map_err(DisasmError)?;
-
-      Ok(())
-    })?;
-
+  let path = std::env::current_dir()?.join(filename);
+  let mut writer = File::create(path).map(BufWriter::new)?;
+  write_disasm(&mut writer, function_bytes, &info.disasm_opts, addr, fn_map)?;
   Ok(())
 }
 
 fn read_file_into(buffer: &mut [u8], path: impl AsRef<Path>, offset: u64) -> Result<(), CompareError> {
-  File::open(path)
-    .and_then(|mut f| f.seek(SeekFrom::Start(offset)).map(|_| f))
-    .and_then(|mut f| f.read_exact(buffer))
-    .map_err(IoError)
+  let mut f = File::open(path)?;
+  f.seek(SeekFrom::Start(offset))?;
+  f.read_exact(buffer)?;
+  Ok(())
 }

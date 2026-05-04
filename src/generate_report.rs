@@ -7,6 +7,7 @@ use itertools::Itertools;
 use serde::Serialize;
 use similar::Change;
 use similar::TextDiff;
+use thiserror::Error;
 
 use super::compare::get_pdb_fn_map;
 
@@ -30,30 +31,28 @@ pub struct GenerateReportOpts {
   pub compare_pdb_file: PathBuf,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum GenerateReportError {
-  PdbError(super::pdb::PdbError),
-  IoError(std::io::Error),
-  DisasmError(super::disasm::DisasmError),
-  RequiredFunctionSizeNotFoundError(String),
-  TemplateError(handlebars::TemplateError),
-  FromUtf8Error(std::string::FromUtf8Error),
-  RenderError(handlebars::RenderError),
-}
+  #[error("PDB file error: {0:#?}")]
+  Pdb(#[from] super::pdb::PdbError),
 
-pub fn print_error(e: &GenerateReportError) {
-  match e {
-    PdbError(e) => println!("PDB file error: {:#?}", e),
-    IoError(e) => println!("IO error: {:#?}", e),
-    DisasmError(e) => println!("Zydis disassembly engine error: {:#?}", e),
-    RequiredFunctionSizeNotFoundError(e) => println!(
-      "No size defined for the original function '{}', but truncate_to_original was specified.",
-      e
-    ),
-    TemplateError(e) => println!("Failed to load web template. {}", e),
-    FromUtf8Error(e) => println!("Failed to convert disassembly to UTF-8 string. {}", e),
-    RenderError(e) => println!("Failed to render output. {}", e),
-  }
+  #[error("IO error: {0}")]
+  Io(#[from] std::io::Error),
+
+  #[error("Zydis disassembly engine error: {0:#?}")]
+  Disasm(#[from] super::disasm::DisasmError),
+
+  #[error("No size defined for the original function '{0}', but truncate_to_original was specified")]
+  RequiredFunctionSizeNotFound(String),
+
+  #[error("Failed to load web template: {0}")]
+  Template(#[from] handlebars::TemplateError),
+
+  #[error("Failed to convert disassembly to UTF-8 string: {0}")]
+  FromUtf8(#[from] std::string::FromUtf8Error),
+
+  #[error("Failed to render output: {0}")]
+  Render(#[from] handlebars::RenderError),
 }
 
 #[derive(Debug, Clone)]
@@ -141,9 +140,7 @@ struct PdbData {
 }
 
 fn register_template(name: &str, handlebars: &mut Handlebars) -> Result<(), GenerateReportError> {
-  handlebars
-    .register_template_string(name, load_asset_text_file(format!("{name}.hbs")))
-    .map_err(TemplateError)?;
+  handlebars.register_template_string(name, load_asset_text_file(format!("{name}.hbs")))?;
   Ok(())
 }
 
@@ -166,7 +163,7 @@ pub fn run(info: &GenerateReportCommandInfo, cfg: &ComparerConfig) -> Result<(),
 
 fn create_all_pages(handlebars: &Handlebars, root: &ReportNode) -> Result<(), GenerateReportError> {
   std::fs::create_dir("report").ok();
-  let file = File::create("report/index.html").map_err(IoError)?;
+  let file = File::create("report/index.html")?;
 
   // create the root page
   let report = ReportOverview {
@@ -191,9 +188,7 @@ fn create_all_pages(handlebars: &Handlebars, root: &ReportNode) -> Result<(), Ge
     diff_html: String::new(),
   };
 
-  handlebars
-    .render_to_write("webpage", &report, file)
-    .map_err(RenderError)?;
+  handlebars.render_to_write("webpage", &report, file)?;
 
   create_pages(handlebars, root)
 }
@@ -238,7 +233,7 @@ fn create_index_list_item(node: &ReportNode) -> ReportListItem {
 fn create_pages(handlebars: &Handlebars, node: &ReportNode) -> Result<(), GenerateReportError> {
   match node {
     ReportNode::Function(function) => {
-      let file = File::create(get_report_pathname(&function.fn_name)).map_err(IoError)?;
+      let file = File::create(get_report_pathname(&function.fn_name))?;
 
       // create function comparison page
       let report = ReportOverview {
@@ -269,16 +264,14 @@ fn create_pages(handlebars: &Handlebars, node: &ReportNode) -> Result<(), Genera
           .map_or(String::new(), |cmp| cmp.diff_html.clone()),
       };
 
-      handlebars
-        .render_to_write("webpage", &report, file)
-        .map_err(RenderError)?;
+      handlebars.render_to_write("webpage", &report, file)?;
     }
     ReportNode::Path(branch) => {
       for node in branch.nodes.iter() {
         create_pages(handlebars, node)?;
       }
 
-      let file = File::create(get_report_pathname(&branch.path)).map_err(IoError)?;
+      let file = File::create(get_report_pathname(&branch.path))?;
       let items = branch
         .nodes
         .iter()
@@ -309,9 +302,7 @@ fn create_pages(handlebars: &Handlebars, node: &ReportNode) -> Result<(), Genera
         diff_html: String::new(),
       };
 
-      handlebars
-        .render_to_write("webpage", &report, file)
-        .map_err(RenderError)?;
+      handlebars.render_to_write("webpage", &report, file)?;
     }
   }
 
@@ -363,20 +354,20 @@ fn create_report_data(
     .map(|f| (f.addr, f.clone()))
     .collect::<HashMap<_, _>>();
 
-  let pdb_functions = get_pdb_funcs(&info.report_opts.compare_pdb_file).map_err(PdbError)?;
+  let pdb_functions = get_pdb_funcs(&info.report_opts.compare_pdb_file)?;
   let pdb_fn_map = get_pdb_fn_map(&pdb_functions);
 
   let orig = OrigData {
     functions: orig_functions,
     fn_map: orig_fn_map,
-    file: std::fs::read(&info.report_opts.orig).map_err(IoError)?,
+    file: std::fs::read(&info.report_opts.orig)?,
     base_address: cfg.address_offset,
   };
 
   let pdb = PdbData {
     functions: pdb_functions,
     fn_map: pdb_fn_map,
-    file: std::fs::read(&info.report_opts.compare_file_path).map_err(IoError)?,
+    file: std::fs::read(&info.report_opts.compare_file_path)?,
   };
 
   Ok(
@@ -390,7 +381,7 @@ fn create_report_data(
         let pdb_fn = pdb.functions.get(fn_name);
 
         let compare_result = create_comparison_data(fn_name, &orig, &pdb, info)
-          .inspect_err(print_error)
+          .inspect_err(|e| eprintln!("{e}"))
           .ok();
 
         DualFunctionReport {
@@ -432,9 +423,7 @@ fn create_comparison_data(
       let orig_fn_size = f
         .size
         .or(pdb_fn.map(|f| f.size))
-        .ok_or(RequiredFunctionSizeNotFoundError(String::from(
-          "No function size provided",
-        )))?;
+        .ok_or(RequiredFunctionSizeNotFound(String::from("No function size provided")))?;
 
       let mut buf = Vec::new();
       write_disasm(
@@ -443,9 +432,8 @@ fn create_comparison_data(
         &info.disasm_opts,
         virt_addr,
         &orig.fn_map,
-      )
-      .map_err(DisasmError)?;
-      String::from_utf8(buf).map_err(FromUtf8Error)?
+      )?;
+      String::from_utf8(buf)?
     }
     None => String::from(""),
   };
@@ -462,9 +450,8 @@ fn create_comparison_data(
         &info.disasm_opts,
         virt_addr,
         &pdb.fn_map,
-      )
-      .map_err(DisasmError)?;
-      String::from_utf8(buf).map_err(FromUtf8Error)?
+      )?;
+      String::from_utf8(buf)?
     }
     None => String::from(""),
   };

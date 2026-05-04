@@ -34,19 +34,19 @@ fn main() {
   match command {
     Command::Compare(info) => {
       if let Err(e) = compare::run(info, &comparer_config) {
-        compare::print_error(&e);
+        eprintln!("{e}");
         std::process::exit(1);
       }
     }
     Command::GenerateFull(info) => {
       if let Err(e) = generate_full::run(info, &comparer_config) {
-        generate_full::print_error(&e);
+        eprintln!("{e}");
         std::process::exit(1);
       }
     }
     Command::GenerateReport(info) => {
       if let Err(e) = generate_report::run(&info, &comparer_config) {
-        generate_report::print_error(&e);
+        eprintln!("{e}");
         std::process::exit(1);
       }
     }

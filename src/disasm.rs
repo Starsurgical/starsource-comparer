@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::fmt::Debug;
 use std::io::{Error as IoError, Write};
 
+use thiserror::Error;
 use zydis::ffi::{DecodedOperandKind, FormatterBuffer, FormatterContext};
 use zydis::{Decoder, Formatter, FormatterStyle, OutputBuffer, Result as ZydisResult, Status, VisibleOperands};
 
@@ -10,7 +11,7 @@ use super::hexformat::*;
 
 #[derive(Debug, Clone)]
 pub struct DisasmOpts {
-  pub print_adresses: bool,
+  pub print_addresses: bool,
   pub show_mem_disp: bool,
   pub show_imms: bool,
 }
@@ -23,10 +24,13 @@ struct DisasmExtra {
   pub offset: u64,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum DisasmError {
-  IoError(IoError),
-  ZydisError(Status),
+  #[error("IO error: {0}")]
+  Io(#[from] IoError),
+
+  #[error("Zydis disassembly error: {0:?}")]
+  Zydis(#[from] Status),
 }
 
 pub fn write_disasm(
@@ -40,20 +44,14 @@ pub fn write_disasm(
   let mut buf = OutputBuffer::new(&mut buf);
 
   let mut formatter = Formatter::<DisasmExtra>::new_custom_userdata(FormatterStyle::INTEL_MASM);
-  formatter
-    .set_print_address_abs(Box::new(format_addrs))
-    .map_err(DisasmError::ZydisError)?;
+  formatter.set_print_address_abs(Box::new(format_addrs))?;
 
   if !disasm_opts.show_mem_disp {
-    formatter
-      .set_print_disp(Box::new(void_format_disp))
-      .map_err(DisasmError::ZydisError)?;
+    formatter.set_print_disp(Box::new(void_format_disp))?;
   }
 
   if !disasm_opts.show_imms {
-    formatter
-      .set_print_imm(Box::new(void_format_imms))
-      .map_err(DisasmError::ZydisError)?;
+    formatter.set_print_imm(Box::new(void_format_imms))?;
   }
 
   let decoder = Decoder::new32();
@@ -72,16 +70,14 @@ pub fn write_disasm(
     let (ip, _, insn) = insn_info.unwrap();
 
     disasm_extra.offset = ip; // BUG: Formatter is not propagating the instruction pointer
-    formatter
-      .format_ex(Some(ip), &insn, &mut buf, Some(&mut disasm_extra))
-      .map_err(DisasmError::ZydisError)?;
+    formatter.format_ex(Some(ip), &insn, &mut buf, Some(&mut disasm_extra))?;
 
     let insn_str = buf.as_str().expect("not utf8");
 
-    if disasm_opts.print_adresses {
-      writeln!(writer, "{:X}: {}", ip, insn_str).map_err(DisasmError::IoError)?;
+    if disasm_opts.print_addresses {
+      writeln!(writer, "{:X}: {}", ip, insn_str)?;
     } else {
-      writeln!(writer, "{}", insn_str).map_err(DisasmError::IoError)?;
+      writeln!(writer, "{}", insn_str)?;
     }
   }
 

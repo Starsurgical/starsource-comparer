@@ -52,7 +52,7 @@ impl Cli {
 
   fn parse_disasm_opts(&self) -> DisasmOpts {
     DisasmOpts {
-      print_adresses: self.show_ip,
+      print_addresses: self.show_ip,
       show_mem_disp: !self.no_mem_disp,
       show_imms: !self.no_imms,
     }
