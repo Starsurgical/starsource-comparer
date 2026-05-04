@@ -8,10 +8,10 @@ use std::time::Duration;
 use notify::{Config, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 
 use self::CompareError::*;
+use super::CustomUpperHexFormat;
 use super::comparer_config::*;
 use super::disasm::*;
 use super::pdb::*;
-use super::CustomUpperHexFormat;
 
 #[derive(Debug)]
 pub struct CompareCommandInfo {

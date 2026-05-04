@@ -2,7 +2,7 @@
 name = "starsource-comparer"
 version = "1.0.0"
 authors = ["Dennis Duda <git@seri.tools>", "Adam Heinermann"]
-edition = '2021'
+edition = '2024'
 
 [dependencies]
 chrono = "0.4.38"
