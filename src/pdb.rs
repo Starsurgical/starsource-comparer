@@ -90,9 +90,11 @@ pub fn get_pdb_funcs(file: impl AsRef<Path>) -> Result<HashMap<String, FunctionS
 
   let mut ret = HashMap::new();
   for function in context.functions() {
-    let fun = to_function_symbol(&context, function)?;
-    let name = demangle_function_name(fun.name.clone());
-    ret.insert(name, fun);
+    if function.name.is_some() {
+      let fun = to_function_symbol(&context, function)?;
+      let name = demangle_function_name(fun.name.clone());
+      ret.insert(name, fun);
+    }
   }
 
   let symbol_table = pdb.global_symbols()?;
