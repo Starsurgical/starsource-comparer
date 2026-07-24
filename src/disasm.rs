@@ -88,7 +88,7 @@ fn cleanup_name(func: &FunctionDefinition) -> String {
   func.name.split('(').next().unwrap_or(&func.name).to_string()
 }
 
-fn process_address(target_addr: u64, imm: &ImmediateInfo) -> String {
+fn process_address(_target_addr: u64, imm: &ImmediateInfo) -> String {
   let prefix = if imm.is_relative { "$" } else { "" };
 
   if imm.is_signed {
@@ -127,6 +127,7 @@ fn format_addrs(
       DecodedOperandKind::Imm(imm) => {
         let target_addr = insn.calc_absolute_address(opts.offset, op)?;
         let func = opts.fn_map.get(&target_addr);
+
         buf.append_str(&func.map_or_else(|| process_address(target_addr, imm), cleanup_name))?
       }
       _ => {}

@@ -108,15 +108,17 @@ pub fn get_pdb_funcs(file: impl AsRef<Path>) -> Result<HashMap<String, FunctionS
         let offset = address - 0xC00;
         let name = re.replace(&raw_name, "$1").to_string();
 
-        ret.insert(
-          name.clone(),
-          FunctionSymbol {
-            name,
-            offset,
-            size: 0,
-            file: String::new(),
-          },
-        );
+        if name == raw_name || !ret.contains_key(&name) {
+          ret.insert(
+            name.clone(),
+            FunctionSymbol {
+              name,
+              offset,
+              size: 0,
+              file: String::new(),
+            },
+          );
+        }
       }
     }
   }
